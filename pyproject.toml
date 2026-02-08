@@ -1,0 +1,23 @@
+[project]
+name = "wiki-ai-translation"
+version = "0.1.0"
+description = "DanceResource Wiki Translation Bot"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+dependencies = [
+  "requests>=2.31.0",
+  "psycopg[binary]>=3.1.18",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[project.scripts]
+wiki-translate-bot = "bot.app:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
