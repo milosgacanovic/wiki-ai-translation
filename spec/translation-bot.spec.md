@@ -12,6 +12,9 @@
 - MediaWiki API
 - Translation Engine(s)
 
+## Engine Choice
+- Primary MT: Google Cloud Translation v3
+
 ## MVP Checklist
 - [ ] Login + token handling
 - [ ] Recent changes polling + revision tracking
