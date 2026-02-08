@@ -9,6 +9,25 @@ import requests
 
 log = logging.getLogger("bot.mediawiki")
 
+TRANSLATIONS_PREFIX = "Translations:"
+
+
+def parse_translation_unit_title(title: str, source_lang: str) -> str | None:
+    if not title.startswith(TRANSLATIONS_PREFIX):
+        return None
+    rest = title[len(TRANSLATIONS_PREFIX) :]
+    parts = rest.split("/")
+    if len(parts) < 2:
+        return None
+    lang = parts[-1]
+    unit = parts[-2]
+    if lang != source_lang or not unit.isdigit():
+        return None
+    base = "/".join(parts[:-2]).strip()
+    if not base:
+        return None
+    return base
+
 
 class MediaWikiError(RuntimeError):
     pass
@@ -25,15 +44,29 @@ class MediaWikiClient:
     def _request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         params = {"format": "json", "formatversion": 2, **params}
         headers = {"User-Agent": self.user_agent}
-        if method == "GET":
-            resp = self.session.get(self.api_url, params=params, headers=headers, timeout=30)
-        else:
-            resp = self.session.post(self.api_url, data=params, headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if "error" in data:
-            raise MediaWikiError(f"MediaWiki API error: {data['error']}")
-        return data
+        backoff = 1
+        for attempt in range(5):
+            if method == "GET":
+                resp = self.session.get(self.api_url, params=params, headers=headers, timeout=30)
+            else:
+                resp = self.session.post(self.api_url, data=params, headers=headers, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            if "error" not in data:
+                return data
+            error = data["error"]
+            code = str(error.get("code", ""))
+            info = str(error.get("info", ""))
+            if code == "ratelimited" or "rate limit" in info.lower():
+                if attempt < 4:
+                    log.warning("rate limited; backing off %ss", backoff)
+                    import time
+
+                    time.sleep(backoff)
+                    backoff *= 2
+                    continue
+            raise MediaWikiError(f"MediaWiki API error: {error}")
+        raise MediaWikiError("MediaWiki API error: exceeded retry attempts")
 
     def get_login_token(self) -> str:
         data = self._request("GET", {"action": "query", "meta": "tokens", "type": "login"})
@@ -77,7 +110,7 @@ class MediaWikiClient:
         data = self._request("GET", params)
         return data["query"]["recentchanges"]
 
-    def get_page_wikitext(self, title: str) -> tuple[str, int]:
+    def get_page_wikitext(self, title: str) -> tuple[str, int, str]:
         data = self._request(
             "GET",
             {
@@ -89,12 +122,58 @@ class MediaWikiClient:
             },
         )
         page = data["query"]["pages"][0]
+        normalized_title = page.get("title", title)
         revisions = page.get("revisions") or []
         if not revisions:
             raise MediaWikiError(f"no revisions for {title}")
         rev = revisions[0]
         text = rev["slots"]["main"]["content"]
-        return text, int(rev["revid"])
+        return text, int(rev["revid"]), normalized_title
+
+    def get_page_revision_id(self, title: str) -> tuple[int, str]:
+        data = self._request(
+            "GET",
+            {
+                "action": "query",
+                "prop": "revisions",
+                "titles": title,
+                "rvprop": "ids",
+            },
+        )
+        page = data["query"]["pages"][0]
+        if page.get("missing"):
+            raise MediaWikiError(f"page missing: {title}")
+        normalized_title = page.get("title", title)
+        revisions = page.get("revisions") or []
+        if not revisions:
+            raise MediaWikiError(f"no revisions for {title}")
+        rev = revisions[0]
+        return int(rev["revid"]), normalized_title
+
+    def iter_translation_base_titles(
+        self, source_lang: str = "en"
+    ) -> list[str]:
+        titles: set[str] = set()
+        apcontinue = None
+        while True:
+            params = {
+                "action": "query",
+                "list": "allpages",
+                "apnamespace": 1198,
+                "aplimit": 200,
+            }
+            if apcontinue:
+                params["apcontinue"] = apcontinue
+            data = self._request("GET", params)
+            for page in data.get("query", {}).get("allpages", []):
+                title = page.get("title", "")
+                base = parse_translation_unit_title(title, source_lang)
+                if base:
+                    titles.add(base)
+            apcontinue = data.get("continue", {}).get("apcontinue")
+            if not apcontinue:
+                break
+        return sorted(titles)
 
     def get_message_collection(self, group_id: str, lang: str) -> dict[str, Any]:
         data = self._request(
@@ -130,4 +209,89 @@ class MediaWikiClient:
         edit = data.get("edit", {})
         if edit.get("result") != "Success":
             raise MediaWikiError(f"edit failed: {edit}")
-        return int(edit.get("newrevid"))
+        newrevid = edit.get("newrevid")
+        if newrevid is None:
+            return 0
+        return int(newrevid)
+
+    def list_translation_unit_keys(self, norm_title: str) -> list[str]:
+        keys: list[str] = []
+        apcontinue = None
+        prefix = f"{norm_title}/"
+        while True:
+            params = {
+                "action": "query",
+                "list": "allpages",
+                "apnamespace": 1198,
+                "apprefix": prefix,
+                "aplimit": 200,
+            }
+            if apcontinue:
+                params["apcontinue"] = apcontinue
+            data = self._request("GET", params)
+            for page in data.get("query", {}).get("allpages", []):
+                title = page.get("title", "")
+                if not title.endswith("/en"):
+                    continue
+                parts = title.split("/")
+                if len(parts) >= 3:
+                    key = parts[-2]
+                    if key.isdigit():
+                        keys.append(key)
+            apcontinue = data.get("continue", {}).get("apcontinue")
+            if not apcontinue:
+                break
+        return sorted(keys, key=lambda k: int(k))
+
+    def translation_review(self, revision_id: int) -> None:
+        if not self.csrf_token:
+            raise MediaWikiError("csrf token missing; call login() first")
+        data = self._request(
+            "POST",
+            {
+                "action": "translationreview",
+                "revision": revision_id,
+                "token": self.csrf_token,
+            },
+        )
+        result = data.get("translationreview", {}).get("result")
+        if result != "Success":
+            raise MediaWikiError(f"translationreview failed: {data}")
+
+    def approve_revision(self, revision_id: int) -> None:
+        if not self.csrf_token:
+            raise MediaWikiError("csrf token missing; call login() first")
+        data = self._request(
+            "POST",
+            {
+                "action": "approve",
+                "revid": revision_id,
+                "token": self.csrf_token,
+            },
+        )
+        result = data.get("approve", {}).get("result")
+        if not result:
+            raise MediaWikiError(f"approve failed: {data}")
+        result_lower = str(result).lower()
+        if "success" not in result_lower and "already approved" not in result_lower:
+            raise MediaWikiError(f"approve failed: {data}")
+
+    def all_pages_page(
+        self, namespace: int = 0, limit: int = 200, apcontinue: str | None = None
+    ) -> tuple[list[str], str | None]:
+        params = {
+            "action": "query",
+            "list": "allpages",
+            "apnamespace": namespace,
+            "aplimit": limit,
+        }
+        if apcontinue:
+            params["apcontinue"] = apcontinue
+        data = self._request("GET", params)
+        titles: list[str] = []
+        for page in data.get("query", {}).get("allpages", []):
+            title = page.get("title")
+            if title:
+                titles.append(title)
+        next_continue = data.get("continue", {}).get("apcontinue")
+        return titles, next_continue

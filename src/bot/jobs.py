@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Iterable
+
+import psycopg
+
+log = logging.getLogger("bot.jobs")
+
+
+@dataclass
+class Job:
+    id: int
+    type: str
+    page_title: str
+    lang: str
+    status: str
+    priority: int
+    retries: int
+
+
+def enqueue_job(
+    conn: psycopg.Connection,
+    job_type: str,
+    page_title: str,
+    lang: str,
+    priority: int = 0,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO jobs (type, page_title, lang, status, priority)
+            VALUES (%s, %s, %s, 'queued', %s)
+            """,
+            (job_type, page_title, lang, priority),
+        )
+
+
+def next_jobs(conn: psycopg.Connection, limit: int = 10) -> list[Job]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, type, page_title, lang, status, priority, retries
+            FROM jobs
+            WHERE status = 'queued'
+            ORDER BY priority DESC, id ASC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        rows = cur.fetchall()
+        return [Job(*row) for row in rows]
+
+
+def mark_job_done(conn: psycopg.Connection, job_id: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE jobs SET status = 'done', updated_at = NOW() WHERE id = %s",
+            (job_id,),
+        )
+
+
+def mark_job_error(conn: psycopg.Connection, job_id: int, error: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE jobs
+            SET status = 'error', retries = retries + 1, error = %s, updated_at = NOW()
+            WHERE id = %s
+            """,
+            (error, job_id),
+        )
