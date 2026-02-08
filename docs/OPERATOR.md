@@ -4,6 +4,7 @@
 - All secrets via environment variables.
 - MediaWiki bot account required.
 - MT provider API keys required.
+- Store Google Cloud service account JSON in `.secrets/` and set `GCP_CREDENTIALS_PATH`.
 
 ## Runtime
 - The bot runs continuously, polling recent changes and processing jobs.

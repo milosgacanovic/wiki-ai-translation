@@ -23,3 +23,7 @@ Bootstrap phase.
 
 ## Probe
 Use `python -m bot.probe_mediawiki` to validate MediaWiki API credentials.
+
+## Secrets
+Store Google Cloud service account JSON at `.secrets/wiki-translate-bot.json` and set
+`GCP_CREDENTIALS_PATH`.

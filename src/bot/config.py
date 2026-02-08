@@ -24,7 +24,7 @@ class Config:
 
     gcp_project_id: str | None = None
     gcp_location: str = "global"
-    gcp_credentials_json: str | None = None
+    gcp_credentials_path: str | None = None
 
 
 def load_config() -> Config:
@@ -52,5 +52,6 @@ def load_config() -> Config:
         mt_fallback=os.getenv("BOT_MT_FALLBACK", "azure"),
         gcp_project_id=os.getenv("GCP_PROJECT_ID"),
         gcp_location=os.getenv("GCP_LOCATION", "global"),
-        gcp_credentials_json=os.getenv("GCP_CREDENTIALS_JSON"),
+        gcp_credentials_path=os.getenv("GCP_CREDENTIALS_PATH")
+        or os.getenv("GCP_CREDENTIALS_JSON"),
     )
