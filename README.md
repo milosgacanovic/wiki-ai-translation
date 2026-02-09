@@ -136,5 +136,17 @@ VALUES ('sr', 'kuriranih', 'odabranih', false, 'preferred adjective');
 
 Re-run the translation after adding termbase entries to apply them.
 
+## Glossaries (Google Translate v3)
+If you need stricter control (for example, person names that must never be translated), you can
+sync a Google glossary from the termbase and tell the bot to use it:
+
+```bash
+wiki-translate-glossary-sync --lang sr --glossary-id dr-sr-glossary --gcs-bucket YOUR_BUCKET --replace
+```
+
+```bash
+BOT_GCP_GLOSSARIES={"sr":"dr-sr-glossary"}
+```
+
 ## License
 Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).

@@ -24,7 +24,11 @@ class GoogleTranslateV3:
         return translate.TranslationServiceClient()
 
     def translate(
-        self, texts: list[str], source_lang: str, target_lang: str
+        self,
+        texts: list[str],
+        source_lang: str,
+        target_lang: str,
+        glossary_id: str | None = None,
     ) -> list[TranslationResult]:
         if not texts:
             return []
@@ -34,19 +38,27 @@ class GoogleTranslateV3:
         client = self._client()
         parent = f"projects/{self.project_id}/locations/{self.location}"
 
-        response = client.translate_text(
-            request={
-                "parent": parent,
-                "contents": list(texts),
-                "mime_type": "text/plain",
-                "source_language_code": source_lang,
-                "target_language_code": target_lang,
-            }
-        )
+        request = {
+            "parent": parent,
+            "contents": list(texts),
+            "mime_type": "text/plain",
+            "source_language_code": source_lang,
+            "target_language_code": target_lang,
+        }
+        if glossary_id:
+            glossary = client.glossary_path(self.project_id, self.location, glossary_id)
+            request["glossary_config"] = {"glossary": glossary}
 
+        response = client.translate_text(request=request)
+
+        translations = (
+            response.glossary_translations
+            if glossary_id and response.glossary_translations
+            else response.translations
+        )
         return [
             TranslationResult(text=t.translated_text, engine=self.name)
-            for t in response.translations
+            for t in translations
         ]
 
 

@@ -45,6 +45,7 @@ class MediaWikiClient:
         params = {"format": "json", "formatversion": 2, **params}
         headers = {"User-Agent": self.user_agent}
         backoff = 1
+        badtoken_retry = False
         for attempt in range(5):
             if method == "GET":
                 resp = self.session.get(self.api_url, params=params, headers=headers, timeout=30)
@@ -57,6 +58,11 @@ class MediaWikiClient:
             error = data["error"]
             code = str(error.get("code", ""))
             info = str(error.get("info", ""))
+            if code == "badtoken" and method == "POST" and "token" in params and not badtoken_retry:
+                badtoken_retry = True
+                self.csrf_token = self.get_csrf_token()
+                params = {**params, "token": self.csrf_token}
+                continue
             if code == "ratelimited" or "rate limit" in info.lower():
                 if attempt < 4:
                     log.warning("rate limited; backing off %ss", backoff)
@@ -175,18 +181,26 @@ class MediaWikiClient:
                 break
         return sorted(titles)
 
-    def get_message_collection(self, group_id: str, lang: str) -> dict[str, Any]:
-        data = self._request(
-            "GET",
-            {
+    def get_message_collection(self, group_id: str, lang: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        mcoffset = None
+        while True:
+            params: dict[str, Any] = {
                 "action": "query",
-                "prop": "messagecollection",
+                "list": "messagecollection",
                 "mcgroup": group_id,
                 "mclanguage": lang,
-                "mclimit": "max",
-            },
-        )
-        return data["query"]["messagecollection"]
+                "mclimit": 5000,
+                "mcprop": "definition|translation",
+            }
+            if mcoffset:
+                params["mcoffset"] = mcoffset
+            data = self._request("GET", params)
+            items.extend(data.get("query", {}).get("messagecollection", []))
+            mcoffset = data.get("continue", {}).get("mcoffset")
+            if not mcoffset:
+                break
+        return items
 
     def site_info(self) -> dict[str, Any]:
         data = self._request("GET", {"action": "query", "meta": "siteinfo", "siprop": "general"})
@@ -214,8 +228,21 @@ class MediaWikiClient:
             return 0
         return int(newrevid)
 
-    def list_translation_unit_keys(self, norm_title: str) -> list[str]:
-        keys: list[str] = []
+    def list_translation_unit_keys(self, norm_title: str, source_lang: str = "en") -> list[str]:
+        key_set: set[str] = set()
+        try:
+            items = self.get_message_collection(f"page-{norm_title}", source_lang)
+            for item in items:
+                key = str(item.get("key") or "")
+                unit_key = key.split("/")[-1]
+                if unit_key.isdigit():
+                    key_set.add(unit_key)
+        except Exception:
+            key_set = set()
+
+        if key_set:
+            return sorted(key_set, key=lambda k: int(k))
+
         apcontinue = None
         prefix = f"{norm_title}/"
         while True:
@@ -231,17 +258,17 @@ class MediaWikiClient:
             data = self._request("GET", params)
             for page in data.get("query", {}).get("allpages", []):
                 title = page.get("title", "")
-                if not title.endswith("/en"):
+                if not title.endswith(f"/{source_lang}"):
                     continue
                 parts = title.split("/")
                 if len(parts) >= 3:
                     key = parts[-2]
                     if key.isdigit():
-                        keys.append(key)
+                        key_set.add(key)
             apcontinue = data.get("continue", {}).get("apcontinue")
             if not apcontinue:
                 break
-        return sorted(keys, key=lambda k: int(k))
+        return sorted(key_set, key=lambda k: int(k))
 
     def translation_review(self, revision_id: int) -> None:
         if not self.csrf_token:

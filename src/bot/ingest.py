@@ -71,12 +71,14 @@ def ingest_title(
     title: str,
     record=None,
 ) -> None:
+    record_cb = record
+
     def _record(status: str, message: str) -> None:
-        if record is not None:
-            record("ingest", status, title, None, message)
+        if record_cb is not None:
+            record_cb("ingest", status, title, None, message)
 
     rev_id, norm_title = client.get_page_revision_id(title)
-    record = get_page(conn, norm_title)
+    page_record = get_page(conn, norm_title)
     upsert_page(conn, norm_title, cfg.source_lang, rev_id)
 
     if should_skip_title(norm_title, cfg.skip_title_prefixes):
@@ -90,11 +92,14 @@ def ingest_title(
 
     unit_keys = client.list_translation_unit_keys(norm_title)
     if unit_keys:
+        if page_record and page_record.last_source_rev == rev_id:
+            _record("skip", "units exist; no source changes")
+            return
         enqueue_translations(cfg, conn, norm_title)
         _record("ok", "units already exist; queued translation")
         return
 
-    if record and record.last_source_rev == rev_id:
+    if page_record and page_record.last_source_rev == rev_id:
         _record("skip", "no source changes detected")
         return
 

@@ -146,9 +146,117 @@ def fetch_errors(conn, run_id: int) -> list[dict[str, str | None]]:
     ]
 
 
+def fetch_items_by_status(conn, run_id: int) -> dict[str, list[dict[str, str | None]]]:
+    items: dict[str, list[dict[str, str | None]]] = {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT kind, page_title, lang, status, message
+            FROM run_items
+            WHERE run_id = %s
+            ORDER BY id ASC
+            """,
+            (run_id,),
+        )
+        rows = cur.fetchall()
+    for kind, page_title, lang, status, message in rows:
+        key = f"{kind}:{status}"
+        items.setdefault(key, []).append(
+            {
+                "kind": kind,
+                "page_title": page_title,
+                "lang": lang,
+                "status": status,
+                "message": message,
+            }
+        )
+    return items
+
+
+def fetch_stats(conn, run_id: int) -> dict[str, int]:
+    stats: dict[str, int] = {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(DISTINCT page_title)
+            FROM run_items
+            WHERE run_id = %s AND kind = 'translate' AND status = 'ok'
+            """,
+            (run_id,),
+        )
+        stats["pages_translated"] = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            SELECT COUNT(DISTINCT page_title)
+            FROM run_items
+            WHERE run_id = %s AND kind = 'translate' AND status = 'error'
+            """,
+            (run_id,),
+        )
+        stats["pages_failed"] = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM run_items
+            WHERE run_id = %s AND kind = 'translate' AND status = 'error'
+            """,
+            (run_id,),
+        )
+        stats["translate_errors"] = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM run_items
+            WHERE run_id = %s AND kind = 'translate' AND status = 'warning'
+            """,
+            (run_id,),
+        )
+        stats["translate_warnings"] = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM run_items
+            WHERE run_id = %s AND kind = 'ingest' AND status = 'ok'
+            """,
+            (run_id,),
+        )
+        stats["ingest_ok"] = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM run_items
+            WHERE run_id = %s AND kind = 'ingest' AND status = 'skip'
+            """,
+            (run_id,),
+        )
+        stats["ingest_skipped"] = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM run_items
+            WHERE run_id = %s AND kind = 'ingest' AND status = 'error'
+            """,
+            (run_id,),
+        )
+        stats["ingest_errors"] = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM run_items
+            WHERE run_id = %s AND kind = 'ingest' AND status = 'ok'
+              AND message ILIKE '%%queued%%'
+            """,
+            (run_id,),
+        )
+        stats["translations_requested"] = int(cur.fetchone()[0])
+    return stats
+
+
 def write_report_file(conn, run_id: int, directory: str = "docs/runs") -> Path:
     summary = fetch_summary(conn, run_id)
     errors = fetch_errors(conn, run_id)
+    stats = fetch_stats(conn, run_id)
+    items = fetch_items_by_status(conn, run_id)
 
     Path(directory).mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
@@ -170,6 +278,11 @@ def write_report_file(conn, run_id: int, directory: str = "docs/runs") -> Path:
         lines.append(f"- {key}: {summary.totals[key]}")
     lines.append("")
 
+    lines.append("## Statistics")
+    for key in sorted(stats.keys()):
+        lines.append(f"- {key}: {stats[key]}")
+    lines.append("")
+
     lines.append("## Errors")
     if not errors:
         lines.append("- none")
@@ -178,6 +291,12 @@ def write_report_file(conn, run_id: int, directory: str = "docs/runs") -> Path:
             lines.append(
                 f"- {err['kind']} {err['page_title']} {err['lang']}: {err['message']}"
             )
+    lines.append("")
+
+    lines.append("## Items")
+    for key in sorted(items.keys()):
+        lines.append(f"- {key}: {len(items[key])}")
+    lines.append("")
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -188,6 +307,7 @@ def report_last_run(conn) -> str:
     if run_id is None:
         return "No runs recorded."
     summary = fetch_summary(conn, run_id)
+    stats = fetch_stats(conn, run_id)
     payload = {
         "run_id": summary.run_id,
         "started_at": summary.started_at,
@@ -198,5 +318,6 @@ def report_last_run(conn) -> str:
         "skip_title_prefixes": summary.skip_title_prefixes,
         "disclaimer_marker": summary.disclaimer_marker,
         "totals": summary.totals,
+        "stats": stats,
     }
     return json.dumps(payload, indent=2)

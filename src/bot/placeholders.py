@@ -16,6 +16,8 @@ REFERENCES_BLOCK_RE = re.compile(r"<references\b[^>]*>.*?</references>", re.IGNO
 REFERENCES_SELF_RE = re.compile(r"<references\b[^>]*/\s*>", re.IGNORECASE)
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 URL_RE = re.compile(r"https?://\S+")
+MAGIC_WORD_RE = re.compile(r"__([A-Z0-9_]+)__")
+FILE_LINK_FULL_RE = re.compile(r"\[\[(?:File|Image):[^\]]+\]\]", re.IGNORECASE)
 
 
 def _extract_balanced(text: str, open_tok: str, close_tok: str) -> list[tuple[int, int]]:
@@ -56,7 +58,7 @@ def _replace_spans(text: str, spans: list[tuple[int, int]], placeholders: dict[s
     return "".join(out)
 
 
-def protect_wikitext(text: str) -> PlaceholderResult:
+def protect_wikitext(text: str, protect_links: bool = True) -> PlaceholderResult:
     placeholders: dict[str, str] = {}
 
     # Protect refs first
@@ -71,18 +73,33 @@ def protect_wikitext(text: str) -> PlaceholderResult:
         placeholders[key] = match.group(0)
         return key
 
+    # Protect MediaWiki magic words like __NOTOC__
+    def _sub_magic(match: re.Match) -> str:
+        key = f"__PH{len(placeholders)}__"
+        placeholders[key] = match.group(0)
+        return key
+
+    # Protect File/Image links so nothing inside changes
+    def _sub_file_link(match: re.Match) -> str:
+        key = f"__PH{len(placeholders)}__"
+        placeholders[key] = match.group(0)
+        return key
+
     text = REFERENCES_BLOCK_RE.sub(_sub_ref, text)
     text = REFERENCES_SELF_RE.sub(_sub_ref, text)
     text = REF_BLOCK_RE.sub(_sub_ref, text)
     text = REF_SELF_RE.sub(_sub_ref, text)
     text = COMMENT_RE.sub(_sub_comment, text)
+    text = MAGIC_WORD_RE.sub(_sub_magic, text)
+    text = FILE_LINK_FULL_RE.sub(_sub_file_link, text)
 
     # Protect templates and links (balanced)
     template_spans = _extract_balanced(text, "{{", "}}")
     text = _replace_spans(text, template_spans, placeholders)
 
-    link_spans = _extract_balanced(text, "[[", "]]")
-    text = _replace_spans(text, link_spans, placeholders)
+    if protect_links:
+        link_spans = _extract_balanced(text, "[[", "]]")
+        text = _replace_spans(text, link_spans, placeholders)
 
     # Protect URLs
     def _sub_url(match: re.Match) -> str:

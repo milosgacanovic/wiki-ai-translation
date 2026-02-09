@@ -27,6 +27,7 @@ class Config:
     gcp_project_id: str | None = None
     gcp_location: str = "global"
     gcp_credentials_path: str | None = None
+    gcp_glossaries: dict[str, str] | None = None
     translate_mark_action: str | None = None
     translate_mark_params: dict[str, str] | None = None
     disclaimer_anchors: dict[str, dict[str, str]] | None = None
@@ -75,6 +76,18 @@ def load_config() -> Config:
             prefixes.append(part.replace("_", " "))
         return tuple(prefixes)
 
+    def _load_gcp_glossaries() -> dict[str, str] | None:
+        raw = os.getenv("BOT_GCP_GLOSSARIES")
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("BOT_GCP_GLOSSARIES must be valid JSON") from exc
+        if not isinstance(data, dict):
+            raise RuntimeError("BOT_GCP_GLOSSARIES must be a JSON object")
+        return {str(k): str(v) for k, v in data.items()}
+
     def req(name: str) -> str:
         value = os.getenv(name)
         if not value:
@@ -104,6 +117,7 @@ def load_config() -> Config:
         gcp_location=os.getenv("GCP_LOCATION", "global"),
         gcp_credentials_path=os.getenv("GCP_CREDENTIALS_PATH")
         or os.getenv("GCP_CREDENTIALS_JSON"),
+        gcp_glossaries=_load_gcp_glossaries(),
         translate_mark_action=os.getenv("BOT_TRANSLATE_MARK_ACTION"),
         translate_mark_params=_load_mark_params(),
         disclaimer_anchors=_load_disclaimer_anchors(),

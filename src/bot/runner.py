@@ -7,7 +7,7 @@ from .config import load_config
 from .logging import configure_logging
 from .mediawiki import MediaWikiClient
 from .db import get_conn
-from .jobs import next_jobs, mark_job_done, mark_job_error
+from .jobs import next_jobs, mark_job_done, mark_job_error, count_jobs
 from .ingest import ingest_all, ingest_title
 from .scheduler import run_poll_loop
 from .translate_page import main as translate_page_main
@@ -26,12 +26,22 @@ def _engine_lang_for(lang: str) -> str:
     return lang
 
 
-def process_queue(cfg, client, run_id: int | None = None) -> None:
+def process_queue(
+    cfg,
+    client,
+    run_id: int | None = None,
+    progress: dict[str, int] | None = None,
+) -> None:
     with get_conn(cfg.pg_dsn) as conn:
         jobs = next_jobs(conn, limit=5)
         for job in jobs:
             try:
                 if job.type == "translate_page":
+                    if progress is not None:
+                        progress["done"] += 1
+                        total = progress["total"]
+                        current = progress["done"]
+                        print(f"{current}/{total} translate {job.page_title} ({job.lang})")
                     import sys
                     sys.argv = [
                         "translate_page",
@@ -118,11 +128,14 @@ def main() -> None:
                     limit=args.ingest_limit,
                     record=_record,
                 )
+            with get_conn(cfg.pg_dsn) as conn:
+                total_jobs = count_jobs(conn, status="queued", job_type="translate_page")
+            progress = {"done": 0, "total": max(total_jobs, 1)}
             while True:
                 with get_conn(cfg.pg_dsn) as conn:
                     if not next_jobs(conn, limit=1):
                         break
-                process_queue(cfg, client, run_id=run_id)
+                process_queue(cfg, client, run_id=run_id, progress=progress)
             with get_conn(cfg.pg_dsn) as conn:
                 finish_run(conn, run_id, "done")
                 report_path = write_report_file(conn, run_id)

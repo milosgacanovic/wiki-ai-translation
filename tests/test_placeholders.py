@@ -7,3 +7,10 @@ def test_comment_placeholder_roundtrip():
     assert "<!--BOT_DISCLAIMER-->" not in result.text
     restored = restore_wikitext(result.text, result.placeholders)
     assert restored == text
+
+
+def test_file_link_filename_preserved():
+    text = "[[File:Arjan bouw.jpg|alt=Arjan Bouw|thumb|Photo: Luna Burger]]"
+    result = protect_wikitext(text)
+    restored = restore_wikitext(result.text, result.placeholders)
+    assert restored == text

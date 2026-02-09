@@ -5,6 +5,7 @@
 - MediaWiki bot account required.
 - MT provider API keys required.
 - Store Google Cloud service account JSON in `.secrets/` and set `GCP_CREDENTIALS_PATH`.
+- For glossaries, `GCP_LOCATION` must be a regional location (for example `us-central1`).
 - `BOT_AUTO_WRAP=1` enables auto-wrapping main namespace pages in `<translate>...</translate>`.
 - `BOT_TRANSLATE_MARK_ACTION` and `BOT_TRANSLATE_MARK_PARAMS` can be set to call a Translate
   extension API after wrapping if units are not detected.
@@ -21,6 +22,7 @@
 - Full run (ingest + translate queue) via `wiki-translate-runner --run-all` (writes a report).
 - Reports are written to `docs/runs/`.
 - Print last run summary via `wiki-translate-runner --report-last`.
+- During `--run-all`, a progress counter like `3/42 translate <title> (sr)` is printed.
 - Use `python -m bot.probe_translate_mark` to log Translate API responses.
 - Backfill cursor is stored in `ingest_state` for resume.
 - API rate-limit backoff is automatic: 1s, 2s, 4s, 8s (max 5 attempts).
@@ -66,6 +68,24 @@ Preferred translations are enforced post-MT via the `termbase` table.
 INSERT INTO termbase (lang, term, preferred, forbidden, notes)
 VALUES ('sr', 'kuriranih', 'odabranih', false, 'preferred adjective');
 ```
+
+## Glossaries (Google Translate v3)
+For stronger control (e.g., names that must never be translated), you can sync a glossary from the
+termbase and have the MT engine use it.
+
+1. Create/update a glossary from the termbase (requires a GCS bucket):
+
+```bash
+wiki-translate-glossary-sync --lang sr --glossary-id dr-sr-glossary --gcs-bucket YOUR_BUCKET --replace
+```
+
+2. Configure the bot to use the glossary:
+
+```bash
+BOT_GCP_GLOSSARIES={"sr":"dr-sr-glossary"}
+```
+
+Re-run the translation to apply glossary enforcement.
 
 ## Safety
 - Edits are marked as bot edits and include a machine-translation disclaimer.

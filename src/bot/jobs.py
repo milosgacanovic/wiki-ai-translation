@@ -53,6 +53,33 @@ def next_jobs(conn: psycopg.Connection, limit: int = 10) -> list[Job]:
         return [Job(*row) for row in rows]
 
 
+def count_jobs(
+    conn: psycopg.Connection,
+    status: str = "queued",
+    job_type: str | None = None,
+) -> int:
+    with conn.cursor() as cur:
+        if job_type:
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM jobs
+                WHERE status = %s AND type = %s
+                """,
+                (status, job_type),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM jobs
+                WHERE status = %s
+                """,
+                (status,),
+            )
+        return int(cur.fetchone()[0])
+
+
 def mark_job_done(conn: psycopg.Connection, job_id: int) -> None:
     with conn.cursor() as cur:
         cur.execute(

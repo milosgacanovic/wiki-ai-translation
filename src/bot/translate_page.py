@@ -10,7 +10,7 @@ from .config import load_config
 from .db import get_conn, fetch_termbase
 from .engines.google_v3 import GoogleTranslateV3
 from .logging import configure_logging
-from .mediawiki import MediaWikiClient
+from .mediawiki import MediaWikiClient, MediaWikiError
 from .placeholders import protect_wikitext, restore_wikitext
 from .segmenter import split_translate_units, Segment
 from .transliteration import sr_cyrillic_to_latin
@@ -34,8 +34,11 @@ def _unit_title(page_title: str, unit_key: str, lang: str) -> str:
 
 
 LINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+FILE_LINK_RE = re.compile(r"\[\[(?:File|Image):[^\]]+\]\]", re.IGNORECASE)
 EMPTY_P_RE = re.compile(r"<p>\s*(?:<br\s*/?>\s*)+</p>", re.IGNORECASE)
 REDIRECT_RE = re.compile(r"^\s*#redirect\b", re.IGNORECASE)
+UNRESOLVED_PLACEHOLDER_RE = re.compile(r"__PH\d+__|__LINK\d+__")
+BROKEN_LINK_RE = re.compile(r"\[\[(?:__PH\d+__|__LINK\d+__)\|([^\]]+)\]\]")
 
 
 def _is_safe_internal_link(target: str) -> bool:
@@ -67,10 +70,14 @@ def _tokenize_links(
 
         if display is None:
             display = target
-        link_meta.append((new_target, display))
+            # Implicit display: do not translate to avoid changing names
+        else:
+            link_meta.append((new_target, display))
         return f"[[{token}|{display}]]"
 
     return LINK_RE.sub(_replace, text), placeholders, link_meta
+
+
 
 
 DISCALIMER_TEXT_BY_LANG = {
@@ -121,6 +128,51 @@ def _build_disclaimer(norm_title: str, lang: str) -> str:
 def _strip_empty_paragraphs(text: str) -> str:
     cleaned = EMPTY_P_RE.sub("", text)
     return cleaned.strip()
+
+
+def _strip_unresolved_placeholders(text: str) -> str:
+    return UNRESOLVED_PLACEHOLDER_RE.sub("", text)
+
+
+def _restore_file_links(source: str, translated: str) -> str:
+    source_links = FILE_LINK_RE.findall(source)
+    if not source_links:
+        return translated
+    translated_links = FILE_LINK_RE.findall(translated)
+    if not translated_links:
+        prefix = "\n".join(source_links)
+        return f"{prefix}\n{translated}" if translated else prefix
+    out = translated
+    for src, tr in zip(source_links, translated_links):
+        out = out.replace(tr, src, 1)
+    if len(source_links) > len(translated_links):
+        extra = "\n".join(source_links[len(translated_links):])
+        out = f"{extra}\n{out}"
+    return out
+
+
+def _fix_broken_links(text: str, lang: str) -> str:
+    def _repl(match: re.Match) -> str:
+        display = match.group(1)
+        return f"[[{display}/{lang}|{display}]]"
+    return BROKEN_LINK_RE.sub(_repl, text)
+
+
+def _rewrite_internal_links_to_lang(text: str, lang: str) -> str:
+    def _repl(match: re.Match) -> str:
+        target = match.group(1)
+        display = match.group(2) or target
+        if not _is_safe_internal_link(target):
+            return match.group(0)
+        page, anchor = (target.split("#", 1) + [""])[:2]
+        if page.endswith(f"/{lang}"):
+            new_target = page
+        else:
+            new_target = f"{page}/{lang}"
+        if anchor:
+            new_target = f"{new_target}#{anchor}"
+        return f"[[{new_target}|{display}]]"
+    return LINK_RE.sub(_repl, text)
 
 
 def _apply_termbase(text: str, entries: list[dict[str, str | bool | None]]) -> str:
@@ -179,8 +231,30 @@ def _fetch_unit_sources(
     segments: list[Segment] = []
     for key in keys:
         unit_title = f"Translations:{norm_title}/{key}/en"
-        text, _, _ = client.get_page_wikitext(unit_title)
+        try:
+            text, _, _ = client.get_page_wikitext(unit_title)
+        except MediaWikiError as exc:
+            logging.getLogger("translate").warning(
+                "missing translation unit %s: %s", unit_title, exc
+            )
+            return []
         segments.append(Segment(key=key, text=text.strip()))
+    return segments
+
+
+def _fetch_messagecollection_segments(
+    client: MediaWikiClient, norm_title: str, source_lang: str
+) -> list[Segment]:
+    group_id = f"page-{norm_title}"
+    items = client.get_message_collection(group_id, source_lang)
+    segments: list[Segment] = []
+    for item in items:
+        key = item.get("key") or ""
+        unit_key = key.split("/")[-1]
+        if not unit_key.isdigit():
+            continue
+        text = (item.get("definition") or "").strip()
+        segments.append(Segment(key=unit_key, text=text))
     return segments
 
 
@@ -232,13 +306,27 @@ def main() -> None:
     if _is_redirect_wikitext(wikitext):
         logging.getLogger("translate").info("skip redirect page: %s", norm_title)
         return
-    unit_keys = client.list_translation_unit_keys(norm_title)
-    if unit_keys:
-        segments = _fetch_unit_sources(client, norm_title, unit_keys)
-    else:
-        segments = split_translate_units(wikitext)
+    segments = _fetch_messagecollection_segments(client, norm_title, cfg.source_lang)
+    if not segments:
+        unit_keys = client.list_translation_unit_keys(norm_title, cfg.source_lang)
+        if unit_keys:
+            unit_keys = sorted(set(unit_keys), key=lambda k: int(k))
+            segments = _fetch_unit_sources(client, norm_title, unit_keys)
+            if not segments:
+                segments = split_translate_units(wikitext)
+        else:
+            segments = split_translate_units(wikitext)
     if not segments:
         raise SystemExit("no segments found; is the page marked for translation?")
+
+    deduped: list[Segment] = []
+    seen_keys: set[str] = set()
+    for seg in segments:
+        if seg.key in seen_keys:
+            continue
+        seen_keys.add(seg.key)
+        deduped.append(seg)
+    segments = deduped
 
     logging.getLogger("translate").info(
         "page=%s rev_id=%s segments=%s", args.title, rev_id, len(segments)
@@ -263,10 +351,15 @@ def main() -> None:
         location=cfg.gcp_location,
         credentials_path=cfg.gcp_credentials_path,
     )
+    glossary_id = None
+    if cfg.gcp_glossaries:
+        glossary_id = cfg.gcp_glossaries.get(args.lang)
 
     # Translate page title for DISPLAYTITLE
     engine_lang = args.engine_lang or args.lang
-    title_translation = engine.translate([norm_title], cfg.source_lang, engine_lang)[0].text
+    title_translation = engine.translate(
+        [norm_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
+    )[0].text
     if engine_lang == "sr-Latn":
         title_translation = sr_cyrillic_to_latin(title_translation)
     if termbase_entries:
@@ -277,23 +370,30 @@ def main() -> None:
 
     protected = []
     link_display_requests: dict[str, str] = {}
+    source_by_key: dict[str, str] = {}
+    marker_key: str | None = None
     for seg in segments:
+        if cfg.disclaimer_marker and cfg.disclaimer_marker in seg.text and marker_key is None:
+            marker_key = seg.key
         link_text, link_placeholders, link_meta = _tokenize_links(seg.text, args.lang)
-        result = protect_wikitext(link_text)
+        result = protect_wikitext(link_text, protect_links=False)
         result.placeholders.update(link_placeholders)
         for target, display in link_meta:
             link_display_requests[target] = display
         protected.append((seg, result))
+        source_by_key[seg.key] = seg.text
 
     translated = engine.translate(
-        [p.text for _, p in protected], cfg.source_lang, engine_lang
+        [p.text for _, p in protected], cfg.source_lang, engine_lang, glossary_id=glossary_id
     )
 
     # Translate link display texts to ensure localized anchors
     link_display_translated: dict[str, str] = {}
     if link_display_requests:
         displays = list(link_display_requests.values())
-        translated_displays = engine.translate(displays, cfg.source_lang, engine_lang)
+        translated_displays = engine.translate(
+            displays, cfg.source_lang, engine_lang, glossary_id=glossary_id
+        )
         for (target, _), tr in zip(link_display_requests.items(), translated_displays):
             link_display_translated[target] = tr.text
 
@@ -301,6 +401,11 @@ def main() -> None:
     ordered_keys: list[str] = []
     for idx, ((seg, ph), tr) in enumerate(zip(protected, translated)):
         restored = restore_wikitext(tr.text, ph.placeholders)
+        # Safety: restore any leftover placeholders in case MT preserved tokens
+        for token, value in ph.placeholders.items():
+            if token in restored:
+                restored = restored.replace(token, value)
+        restored = _restore_file_links(seg.text, restored)
         if engine_lang == "sr-Latn":
             restored = sr_cyrillic_to_latin(restored)
         if link_display_translated:
@@ -315,6 +420,8 @@ def main() -> None:
                 return f"[[{target}|{display}]]"
 
             restored = LINK_RE.sub(_rewrite_display, restored)
+        restored = _fix_broken_links(restored, args.lang)
+        restored = _rewrite_internal_links_to_lang(restored, args.lang)
         if termbase_entries:
             restored = _apply_termbase(restored, termbase_entries)
         restored = _strip_empty_paragraphs(restored)
@@ -336,6 +443,17 @@ def main() -> None:
                 inserted = True
                 break
 
+    if not inserted and marker_key and marker_key in translated_by_key:
+        translated_by_key[marker_key] = _insert_disclaimer(
+            translated_by_key[marker_key],
+            disclaimer,
+            cfg.disclaimer_marker,
+            norm_title,
+            args.lang,
+            cfg.disclaimer_anchors,
+        )
+        inserted = True
+
     if not inserted and ordered_keys:
         first_key = ordered_keys[0]
         translated_by_key[first_key] = _insert_disclaimer(
@@ -346,6 +464,10 @@ def main() -> None:
             args.lang,
             cfg.disclaimer_anchors,
         )
+
+    if cfg.disclaimer_marker:
+        for key in ordered_keys:
+            translated_by_key[key] = translated_by_key[key].replace(cfg.disclaimer_marker, "")
 
     if ordered_keys:
         displaytitle = f"{{{{DISPLAYTITLE:{title_translation}}}}}"
@@ -359,9 +481,16 @@ def main() -> None:
         translated_by_key[key] = _strip_empty_paragraphs(translated_by_key[key])
         if termbase_entries:
             translated_by_key[key] = _apply_termbase(translated_by_key[key], termbase_entries)
+        translated_by_key[key] = _strip_unresolved_placeholders(translated_by_key[key])
+
+    # Final pass after disclaimer/displaytitle insertion
+    for key in ordered_keys:
+        translated_by_key[key] = _strip_unresolved_placeholders(translated_by_key[key])
 
     for key in ordered_keys:
         restored = translated_by_key[key]
+        source_text = source_by_key.get(key, "")
+        restored = _restore_file_links(source_text, restored)
         unit_title = _unit_title(norm_title, key, args.lang)
         summary = "Machine translation by bot (draft, needs review)"
 
@@ -379,9 +508,17 @@ def main() -> None:
 
     if args.auto_approve:
         assembled_title = f"{norm_title}/{args.lang}"
-        _, assembled_rev, _ = client.get_page_wikitext(assembled_title)
+        try:
+            _, assembled_rev, _ = client.get_page_wikitext(assembled_title)
+        except MediaWikiError as exc:
+            logging.getLogger("translate").warning(
+                "skip approve: %s", exc
+            )
+            return
         client.approve_revision(assembled_rev)
-        logging.getLogger("translate").info("approved assembled page %s", assembled_title)
+        logging.getLogger("translate").info(
+            "approved assembled page %s", assembled_title
+        )
 
 
 if __name__ == "__main__":
