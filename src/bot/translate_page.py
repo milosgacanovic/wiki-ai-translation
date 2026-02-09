@@ -39,6 +39,7 @@ EMPTY_P_RE = re.compile(r"<p>\s*(?:<br\s*/?>\s*)+</p>", re.IGNORECASE)
 REDIRECT_RE = re.compile(r"^\s*#redirect\b", re.IGNORECASE)
 UNRESOLVED_PLACEHOLDER_RE = re.compile(r"__PH\d+__|__LINK\d+__")
 BROKEN_LINK_RE = re.compile(r"\[\[(?:__PH\d+__|__LINK\d+__)\|([^\]]+)\]\]")
+DISPLAYTITLE_RE = re.compile(r"\{\{\s*DISPLAYTITLE\s*:[^}]+\}\}", re.IGNORECASE)
 
 
 def _is_safe_internal_link(target: str) -> bool:
@@ -469,7 +470,8 @@ def main() -> None:
         for key in ordered_keys:
             translated_by_key[key] = translated_by_key[key].replace(cfg.disclaimer_marker, "")
 
-    if ordered_keys:
+    has_displaytitle = any(DISPLAYTITLE_RE.search(text) for text in source_by_key.values())
+    if ordered_keys and not has_displaytitle:
         displaytitle = f"{{{{DISPLAYTITLE:{title_translation}}}}}"
         translated_by_key[ordered_keys[0]] = f"{displaytitle}\n{translated_by_key[ordered_keys[0]]}"
         translated_by_key[ordered_keys[0]] = _strip_empty_paragraphs(translated_by_key[ordered_keys[0]])
