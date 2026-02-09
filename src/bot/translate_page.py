@@ -48,9 +48,10 @@ def _is_safe_internal_link(target: str) -> bool:
 
 def _tokenize_links(
     text: str, lang: str
-) -> tuple[str, dict[str, str], list[tuple[str, str]]]:
+) -> tuple[str, dict[str, str], list[tuple[str, str]], set[str]]:
     placeholders: dict[str, str] = {}
     link_meta: list[tuple[str, str]] = []
+    source_targets: set[str] = set()
 
     def _replace(match: re.Match) -> str:
         target = match.group(1)
@@ -59,6 +60,7 @@ def _tokenize_links(
             return match.group(0)
 
         page, anchor = (target.split("#", 1) + [""])[:2]
+        source_targets.add(page)
         if page.endswith(f"/{lang}"):
             new_target = page
         else:
@@ -76,7 +78,7 @@ def _tokenize_links(
             link_meta.append((new_target, display))
         return f"[[{token}|{display}]]"
 
-    return LINK_RE.sub(_replace, text), placeholders, link_meta
+    return LINK_RE.sub(_replace, text), placeholders, link_meta, source_targets
 
 
 
@@ -159,14 +161,16 @@ def _fix_broken_links(text: str, lang: str) -> str:
     return BROKEN_LINK_RE.sub(_repl, text)
 
 
-def _rewrite_internal_links_to_lang(text: str, lang: str) -> str:
+def _rewrite_internal_links_to_lang_with_source(
+    text: str, lang: str, source_targets: set[str]
+) -> str:
     def _repl(match: re.Match) -> str:
         target = match.group(1)
         display = match.group(2) or target
         if not _is_safe_internal_link(target):
             return match.group(0)
         page, anchor = (target.split("#", 1) + [""])[:2]
-        if page.endswith(f"/{lang}"):
+        if page.endswith(f"/{lang}") or page not in source_targets:
             new_target = page
         else:
             new_target = f"{page}/{lang}"
@@ -186,6 +190,31 @@ def _apply_termbase(text: str, entries: list[dict[str, str | bool | None]]) -> s
         pattern = re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
         updated = pattern.sub(preferred, updated)
     return updated
+
+
+def _protect_link_targets(text: str) -> tuple[str, dict[str, str]]:
+    placeholders: dict[str, str] = {}
+
+    def _repl(match: re.Match) -> str:
+        target = match.group(1)
+        display = match.group(2)
+        if not _is_safe_internal_link(target):
+            return match.group(0)
+        token = f"__LT{len(placeholders)}__"
+        placeholders[token] = target
+        if display is None:
+            return f"[[{token}]]"
+        return f"[[{token}|{display}]]"
+
+    return LINK_RE.sub(_repl, text), placeholders
+
+
+def _apply_termbase_safe(text: str, entries: list[dict[str, str | bool | None]]) -> str:
+    if not entries:
+        return text
+    protected, placeholders = _protect_link_targets(text)
+    updated = _apply_termbase(protected, entries)
+    return restore_wikitext(updated, placeholders)
 
 
 def _normalize_leading_directives(text: str) -> str:
@@ -289,6 +318,7 @@ def main() -> None:
     parser.add_argument("--fuzzy", action="store_true", default=False)
     parser.add_argument("--no-fuzzy", action="store_false", dest="fuzzy")
     parser.add_argument("--start-key", type=int, default=None)
+    parser.add_argument("--max-keys", type=int, default=None)
     parser.add_argument("--sleep-ms", type=int, default=200)
     parser.add_argument("--auto-approve", action="store_true")
     parser.add_argument("--auto-review", action="store_true", default=False)
@@ -366,17 +396,22 @@ def main() -> None:
     if termbase_entries:
         title_translation = _apply_termbase(title_translation, termbase_entries)
 
+    segments = sorted(segments, key=lambda s: int(s.key))
     if args.start_key is not None:
         segments = [s for s in segments if int(s.key) >= args.start_key]
+    if args.max_keys is not None and args.max_keys > 0:
+        segments = segments[: args.max_keys]
 
     protected = []
     link_display_requests: dict[str, str] = {}
     source_by_key: dict[str, str] = {}
     marker_key: str | None = None
+    source_targets: set[str] = set()
     for seg in segments:
         if cfg.disclaimer_marker and cfg.disclaimer_marker in seg.text and marker_key is None:
             marker_key = seg.key
-        link_text, link_placeholders, link_meta = _tokenize_links(seg.text, args.lang)
+        link_text, link_placeholders, link_meta, seg_targets = _tokenize_links(seg.text, args.lang)
+        source_targets.update(seg_targets)
         result = protect_wikitext(link_text, protect_links=False)
         result.placeholders.update(link_placeholders)
         for target, display in link_meta:
@@ -422,9 +457,11 @@ def main() -> None:
 
             restored = LINK_RE.sub(_rewrite_display, restored)
         restored = _fix_broken_links(restored, args.lang)
-        restored = _rewrite_internal_links_to_lang(restored, args.lang)
+        restored = _rewrite_internal_links_to_lang_with_source(
+            restored, args.lang, source_targets
+        )
         if termbase_entries:
-            restored = _apply_termbase(restored, termbase_entries)
+            restored = _apply_termbase_safe(restored, termbase_entries)
         restored = _strip_empty_paragraphs(restored)
         # Mark as fuzzy to indicate machine translation if enabled
         if args.fuzzy:
@@ -482,7 +519,9 @@ def main() -> None:
     for key in ordered_keys:
         translated_by_key[key] = _strip_empty_paragraphs(translated_by_key[key])
         if termbase_entries:
-            translated_by_key[key] = _apply_termbase(translated_by_key[key], termbase_entries)
+            translated_by_key[key] = _apply_termbase_safe(
+                translated_by_key[key], termbase_entries
+            )
         translated_by_key[key] = _strip_unresolved_placeholders(translated_by_key[key])
 
     # Final pass after disclaimer/displaytitle insertion

@@ -1,6 +1,7 @@
 from bot.translate_page import (
     _strip_empty_paragraphs,
     _apply_termbase,
+    _apply_termbase_safe,
     _is_redirect_wikitext,
     _strip_unresolved_placeholders,
     _fix_broken_links,
@@ -18,6 +19,12 @@ def test_strip_empty_paragraphs():
 def test_apply_termbase():
     entries = [{"term": "kuriranih", "preferred": "odabranih"}]
     assert _apply_termbase("Biblioteka kuriranih resursa", entries) == "Biblioteka odabranih resursa"
+    text = "[[Conscious Dance Practices/5Rhythms/sr|5Rhythms]]"
+    entries = [{"term": "5Rhythms", "preferred": "5Ritmova"}]
+    assert (
+        _apply_termbase_safe(text, entries)
+        == "[[Conscious Dance Practices/5Rhythms/sr|5Ritmova]]"
+    )
 
 
 def test_is_redirect_wikitext():
