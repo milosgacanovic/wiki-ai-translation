@@ -7,6 +7,7 @@ import time
 import re
 
 from .config import load_config
+from .db import get_conn, fetch_termbase
 from .engines.google_v3 import GoogleTranslateV3
 from .logging import configure_logging
 from .mediawiki import MediaWikiClient
@@ -33,6 +34,8 @@ def _unit_title(page_title: str, unit_key: str, lang: str) -> str:
 
 
 LINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+EMPTY_P_RE = re.compile(r"<p>\s*(?:<br\s*/?>\s*)+</p>", re.IGNORECASE)
+REDIRECT_RE = re.compile(r"^\s*#redirect\b", re.IGNORECASE)
 
 
 def _is_safe_internal_link(target: str) -> bool:
@@ -115,6 +118,61 @@ def _build_disclaimer(norm_title: str, lang: str) -> str:
     )
 
 
+def _strip_empty_paragraphs(text: str) -> str:
+    cleaned = EMPTY_P_RE.sub("", text)
+    return cleaned.strip()
+
+
+def _apply_termbase(text: str, entries: list[dict[str, str | bool | None]]) -> str:
+    updated = text
+    for entry in entries:
+        term = entry.get("term") or ""
+        preferred = entry.get("preferred") or ""
+        if not term or not preferred:
+            continue
+        pattern = re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
+        updated = pattern.sub(preferred, updated)
+    return updated
+
+
+def _normalize_leading_directives(text: str) -> str:
+    pattern = re.compile(
+        r"(\{\{DISPLAYTITLE:[^}]+\}\})\s*\n+\s*(__NOTOC__)?\s*\n+\s*(\[\[File:[^\]]+\]\])",
+        re.IGNORECASE,
+    )
+
+    def _repl(match: re.Match) -> str:
+        display = match.group(1)
+        notoc = match.group(2) or ""
+        filetag = match.group(3)
+        return f"{display}{notoc}{filetag}"
+
+    return pattern.sub(_repl, text, count=1)
+
+
+def _is_redirect_wikitext(text: str) -> bool:
+    return bool(REDIRECT_RE.search(text.lstrip("\ufeff")))
+
+
+def _insert_disclaimer(
+    text: str,
+    disclaimer: str,
+    marker: str | None,
+    norm_title: str,
+    lang: str,
+    anchors: dict[str, dict[str, str]] | None,
+) -> str:
+    if marker and marker in text:
+        return text.replace(marker, f"\n\n{disclaimer}\n\n", 1)
+    if anchors and norm_title in anchors and lang in anchors[norm_title]:
+        anchor = anchors[norm_title][lang]
+        idx = text.find(anchor)
+        if idx != -1:
+            insert_at = idx + len(anchor)
+            return text[:insert_at] + "\n\n" + disclaimer + "\n\n" + text[insert_at:]
+    return f"{disclaimer}\n\n{text}"
+
+
 def _fetch_unit_sources(
     client: MediaWikiClient, norm_title: str, keys: list[str]
 ) -> list[Segment]:
@@ -171,6 +229,9 @@ def main() -> None:
     client.login(cfg.mw_username, cfg.mw_password)
 
     wikitext, rev_id, norm_title = client.get_page_wikitext(args.title)
+    if _is_redirect_wikitext(wikitext):
+        logging.getLogger("translate").info("skip redirect page: %s", norm_title)
+        return
     unit_keys = client.list_translation_unit_keys(norm_title)
     if unit_keys:
         segments = _fetch_unit_sources(client, norm_title, unit_keys)
@@ -182,6 +243,16 @@ def main() -> None:
     logging.getLogger("translate").info(
         "page=%s rev_id=%s segments=%s", args.title, rev_id, len(segments)
     )
+
+    termbase_entries: list[dict[str, str | bool | None]] = []
+    if cfg.pg_dsn:
+        try:
+            with get_conn(cfg.pg_dsn) as conn:
+                termbase_entries = fetch_termbase(conn, args.lang)
+        except Exception:
+            termbase_entries = []
+
+    logging.getLogger("translate").info("termbase entries=%s", len(termbase_entries))
 
     project_id = _resolve_project_id(cfg.gcp_project_id, cfg.gcp_credentials_path)
     if not project_id:
@@ -198,6 +269,8 @@ def main() -> None:
     title_translation = engine.translate([norm_title], cfg.source_lang, engine_lang)[0].text
     if engine_lang == "sr-Latn":
         title_translation = sr_cyrillic_to_latin(title_translation)
+    if termbase_entries:
+        title_translation = _apply_termbase(title_translation, termbase_entries)
 
     if args.start_key is not None:
         segments = [s for s in segments if int(s.key) >= args.start_key]
@@ -225,6 +298,7 @@ def main() -> None:
             link_display_translated[target] = tr.text
 
     translated_by_key: dict[str, str] = {}
+    ordered_keys: list[str] = []
     for idx, ((seg, ph), tr) in enumerate(zip(protected, translated)):
         restored = restore_wikitext(tr.text, ph.placeholders)
         if engine_lang == "sr-Latn":
@@ -241,15 +315,54 @@ def main() -> None:
                 return f"[[{target}|{display}]]"
 
             restored = LINK_RE.sub(_rewrite_display, restored)
-        if idx == 0:
-            disclaimer = args.disclaimer or _build_disclaimer(norm_title, args.lang)
-            displaytitle = f"{{{{DISPLAYTITLE:{title_translation}}}}}"
-            restored = f"{displaytitle}\n{disclaimer}\n\n{restored}"
+        if termbase_entries:
+            restored = _apply_termbase(restored, termbase_entries)
+        restored = _strip_empty_paragraphs(restored)
         # Mark as fuzzy to indicate machine translation if enabled
         if args.fuzzy:
             restored = f"!!FUZZY!!\n{restored}"
         translated_by_key[seg.key] = restored
-        unit_title = _unit_title(norm_title, seg.key, args.lang)
+        ordered_keys.append(seg.key)
+
+    disclaimer = args.disclaimer or _build_disclaimer(norm_title, args.lang)
+    inserted = False
+    if cfg.disclaimer_marker:
+        for key in ordered_keys:
+            text = translated_by_key[key]
+            if cfg.disclaimer_marker in text:
+                translated_by_key[key] = _insert_disclaimer(
+                    text, disclaimer, cfg.disclaimer_marker, norm_title, args.lang, cfg.disclaimer_anchors
+                )
+                inserted = True
+                break
+
+    if not inserted and ordered_keys:
+        first_key = ordered_keys[0]
+        translated_by_key[first_key] = _insert_disclaimer(
+            translated_by_key[first_key],
+            disclaimer,
+            cfg.disclaimer_marker,
+            norm_title,
+            args.lang,
+            cfg.disclaimer_anchors,
+        )
+
+    if ordered_keys:
+        displaytitle = f"{{{{DISPLAYTITLE:{title_translation}}}}}"
+        translated_by_key[ordered_keys[0]] = f"{displaytitle}\n{translated_by_key[ordered_keys[0]]}"
+        translated_by_key[ordered_keys[0]] = _strip_empty_paragraphs(translated_by_key[ordered_keys[0]])
+        translated_by_key[ordered_keys[0]] = _normalize_leading_directives(
+            translated_by_key[ordered_keys[0]]
+        )
+
+    for key in ordered_keys:
+        translated_by_key[key] = _strip_empty_paragraphs(translated_by_key[key])
+        if termbase_entries:
+            translated_by_key[key] = _apply_termbase(translated_by_key[key], termbase_entries)
+
+    for key in ordered_keys:
+        restored = translated_by_key[key]
+        unit_title = _unit_title(norm_title, key, args.lang)
         summary = "Machine translation by bot (draft, needs review)"
 
         if args.dry_run:

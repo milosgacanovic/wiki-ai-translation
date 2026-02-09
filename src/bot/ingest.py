@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+import re
 
 from .config import Config
 from .mediawiki import MediaWikiClient, MediaWikiError
@@ -28,6 +29,29 @@ def wrap_with_translate(wikitext: str) -> str:
     return f"<translate>\n{body}\n</translate>\n"
 
 
+def is_redirect_wikitext(wikitext: str) -> bool:
+    stripped = wikitext.lstrip("\ufeff \t\r\n")
+    return stripped.lower().startswith("#redirect")
+
+
+def should_skip_title(title: str, prefixes: tuple[str, ...]) -> bool:
+    if not prefixes:
+        return False
+    norm = title.replace("_", " ")
+    return any(norm.startswith(prefix) for prefix in prefixes)
+
+
+def is_translation_subpage(title: str, target_langs: tuple[str, ...]) -> bool:
+    if "/" not in title:
+        return False
+    suffix = title.split("/")[-1]
+    if suffix in target_langs:
+        return True
+    if re.fullmatch(r"[a-z]{2,3}(?:-[a-z0-9]+)*", suffix):
+        return True
+    return False
+
+
 def enqueue_translations(cfg: Config, conn, title: str) -> None:
     for lang in cfg.target_langs:
         enqueue_job(conn, "translate_page", title, lang, priority=0)
@@ -40,36 +64,65 @@ def _apply_placeholders(params: dict[str, str], title: str, revision: int) -> di
     return out
 
 
-def ingest_title(cfg: Config, client: MediaWikiClient, conn, title: str) -> None:
+def ingest_title(
+    cfg: Config,
+    client: MediaWikiClient,
+    conn,
+    title: str,
+    record=None,
+) -> None:
+    def _record(status: str, message: str) -> None:
+        if record is not None:
+            record("ingest", status, title, None, message)
+
     rev_id, norm_title = client.get_page_revision_id(title)
     record = get_page(conn, norm_title)
     upsert_page(conn, norm_title, cfg.source_lang, rev_id)
 
+    if should_skip_title(norm_title, cfg.skip_title_prefixes):
+        log.info("skip translation for %s due to prefix rule", norm_title)
+        _record("skip", "skip prefix rule")
+        return
+    if cfg.skip_translation_subpages and is_translation_subpage(norm_title, cfg.target_langs):
+        log.info("skip translation subpage: %s", norm_title)
+        _record("skip", "translation subpage")
+        return
+
     unit_keys = client.list_translation_unit_keys(norm_title)
     if unit_keys:
         enqueue_translations(cfg, conn, norm_title)
+        _record("ok", "units already exist; queued translation")
         return
 
     if record and record.last_source_rev == rev_id:
+        _record("skip", "no source changes detected")
         return
 
     if not is_main_namespace(norm_title):
         log.info("skip non-main namespace page: %s", norm_title)
+        _record("skip", "non-main namespace")
         return
 
     if not cfg.auto_wrap:
         log.info("auto wrap disabled; skipping %s", norm_title)
+        _record("skip", "auto wrap disabled")
         return
 
     wikitext, _, _ = client.get_page_wikitext(norm_title)
+    if is_redirect_wikitext(wikitext):
+        log.info("skip redirect page: %s", norm_title)
+        _record("skip", "redirect page")
+        return
     already_wrapped = is_translation_wrapped(wikitext)
     if already_wrapped:
         log.info("page already wrapped but no units yet: %s", norm_title)
+        _record("ok", "already wrapped")
     else:
         wrapped = wrap_with_translate(wikitext)
         summary = "Wrap page in <translate> for machine translation"
         client.edit(norm_title, wrapped, summary, bot=True)
         log.info("wrapped page for translation: %s", norm_title)
+        _record("ok", "wrapped")
 
         new_rev_id, _ = client.get_page_revision_id(norm_title)
         rev_id = new_rev_id
@@ -90,20 +143,24 @@ def ingest_title(cfg: Config, client: MediaWikiClient, conn, title: str) -> None
             client._request("POST", params)
         except MediaWikiError as exc:
             log.error("translate mark API failed: %s", exc)
+            _record("error", f"mark for translation failed: {exc}")
             return
 
         for _ in range(5):
             unit_keys = client.list_translation_unit_keys(norm_title)
             if unit_keys:
                 enqueue_translations(cfg, conn, norm_title)
+                _record("ok", "units created; queued translation")
                 return
             time.sleep(0.5)
 
     unit_keys = client.list_translation_unit_keys(norm_title)
     if unit_keys:
         enqueue_translations(cfg, conn, norm_title)
+        _record("ok", "units created; queued translation")
     else:
         log.info("no translation units detected after wrap: %s", norm_title)
+        _record("error", "no translation units detected after wrap")
 
 
 def ingest_all(
@@ -112,6 +169,7 @@ def ingest_all(
     conn,
     sleep_ms: int = 0,
     limit: int | None = None,
+    record=None,
 ) -> None:
     cursor = get_ingest_cursor(conn, "main")
     processed = 0
@@ -121,9 +179,11 @@ def ingest_all(
             break
         for title in titles:
             try:
-                ingest_title(cfg, client, conn, title)
+                ingest_title(cfg, client, conn, title, record=record)
             except Exception as exc:
                 log.error("ingest failed for %s: %s", title, exc)
+                if record is not None:
+                    record("ingest", "error", title, None, f"exception: {exc}")
             processed += 1
             if limit is not None and processed >= limit:
                 set_ingest_cursor(conn, "main", cursor)

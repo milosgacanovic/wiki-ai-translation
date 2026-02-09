@@ -11,6 +11,13 @@ from .jobs import next_jobs, mark_job_done, mark_job_error
 from .ingest import ingest_all, ingest_title
 from .scheduler import run_poll_loop
 from .translate_page import main as translate_page_main
+from .run_report import (
+    start_run,
+    finish_run,
+    log_item,
+    write_report_file,
+    report_last_run,
+)
 
 
 def _engine_lang_for(lang: str) -> str:
@@ -19,7 +26,7 @@ def _engine_lang_for(lang: str) -> str:
     return lang
 
 
-def process_queue(cfg, client) -> None:
+def process_queue(cfg, client, run_id: int | None = None) -> None:
     with get_conn(cfg.pg_dsn) as conn:
         jobs = next_jobs(conn, limit=5)
         for job in jobs:
@@ -39,9 +46,13 @@ def process_queue(cfg, client) -> None:
                         "800",
                     ]
                     translate_page_main()
+                    if run_id is not None:
+                        log_item(conn, run_id, "translate", "ok", job.page_title, job.lang, None)
                 mark_job_done(conn, job.id)
             except Exception as exc:
                 mark_job_error(conn, job.id, str(exc))
+                if run_id is not None:
+                    log_item(conn, run_id, "translate", "error", job.page_title, job.lang, str(exc))
 
 
 def main() -> None:
@@ -51,6 +62,8 @@ def main() -> None:
     parser.add_argument("--ingest-all", action="store_true", help="ingest all main namespace pages")
     parser.add_argument("--ingest-limit", type=int, default=None)
     parser.add_argument("--ingest-sleep-ms", type=int, default=0)
+    parser.add_argument("--run-all", action="store_true", help="ingest all then process queue")
+    parser.add_argument("--report-last", action="store_true", help="print last run summary as JSON")
     parser.add_argument("--poll", action="store_true", help="run recentchanges poller")
     args, _ = parser.parse_known_args()
 
@@ -75,6 +88,52 @@ def main() -> None:
                 sleep_ms=args.ingest_sleep_ms,
                 limit=args.ingest_limit,
             )
+        return
+
+    if args.report_last:
+        with get_conn(cfg.pg_dsn) as conn:
+            print(report_last_run(conn))
+        return
+
+    if args.run_all:
+        run_id: int | None = None
+        try:
+            with get_conn(cfg.pg_dsn) as conn:
+                run_id = start_run(conn, "run-all", cfg)
+
+                def _record(
+                    kind: str,
+                    status: str,
+                    page_title: str,
+                    lang: str | None,
+                    message: str,
+                ) -> None:
+                    log_item(conn, run_id, kind, status, page_title, lang, message)
+
+                ingest_all(
+                    cfg,
+                    client,
+                    conn,
+                    sleep_ms=args.ingest_sleep_ms,
+                    limit=args.ingest_limit,
+                    record=_record,
+                )
+            while True:
+                with get_conn(cfg.pg_dsn) as conn:
+                    if not next_jobs(conn, limit=1):
+                        break
+                process_queue(cfg, client, run_id=run_id)
+            with get_conn(cfg.pg_dsn) as conn:
+                finish_run(conn, run_id, "done")
+                report_path = write_report_file(conn, run_id)
+            print(str(report_path))
+        except Exception as exc:
+            if run_id is not None:
+                with get_conn(cfg.pg_dsn) as conn:
+                    finish_run(conn, run_id, "error")
+                    log_item(conn, run_id, "run", "error", None, None, str(exc))
+                    write_report_file(conn, run_id)
+            raise
         return
 
     if args.only_title:

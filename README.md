@@ -42,6 +42,20 @@ Translate a single page (safe test mode):
 wiki-translate-runner --only-title "Future_Directions_and_Vision"
 ```
 
+Full run (ingest + translate queue) with a report:
+
+```bash
+wiki-translate-runner --run-all
+```
+
+Reports are written to `docs/runs/`.
+
+Print last run summary (JSON):
+
+```bash
+wiki-translate-runner --report-last
+```
+
 ## Ingestion
 Backfill all main namespace pages (wraps with `<translate>` if needed and enqueues jobs):
 
@@ -77,6 +91,50 @@ BOT_TRANSLATE_MARK_ACTION=markfortranslation
 BOT_TRANSLATE_MARK_PARAMS={"title":"{title}","translatetitle":"yes"}
 ```
 If the API module is unavailable, leave these empty and mark pages manually or enable it server-side.
+
+## Disclaimer Placement (Optional)
+By default the disclaimer is inserted at the top of the translated page (first segment).
+You can move it to a specific location by providing an anchor string per page + language:
+
+```bash
+BOT_DISCLAIMER_ANCHORS={"Welcome_to_the_DanceResource_Wiki":{"sr":"To learn what we stand for, read our Core Values, and explore the vision that moves us in the Manifesto."}}
+```
+
+If the anchor string is found in the translated segment, the disclaimer is inserted immediately after it.
+If not found, the disclaimer falls back to the top.
+
+Alternatively, you can place an invisible marker in the source wikitext (recommended for editors):
+
+```bash
+BOT_DISCLAIMER_MARKER=<!--BOT_DISCLAIMER-->
+```
+
+Place `<!--BOT_DISCLAIMER-->` in the source where the disclaimer should appear.
+
+## Skip Prefixes (Optional)
+Skip translation for specific subtrees by title prefix:
+
+```bash
+BOT_SKIP_TITLE_PREFIXES=Conscious Dance Practices/InnerMotion/The Guidebook/
+```
+
+## Skip Translation Subpages (Optional)
+Skip `/sr`, `/sr-el`, etc. translation subpages to avoid reprocessing translated pages:
+
+```bash
+BOT_SKIP_TRANSLATION_SUBPAGES=1
+```
+
+## Termbase (Per-Language)
+Preferred translations are stored in Postgres (`termbase` table) and are enforced after MT.
+Example:
+
+```sql
+INSERT INTO termbase (lang, term, preferred, forbidden, notes)
+VALUES ('sr', 'kuriranih', 'odabranih', false, 'preferred adjective');
+```
+
+Re-run the translation after adding termbase entries to apply them.
 
 ## License
 Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).

@@ -14,6 +14,7 @@ REF_BLOCK_RE = re.compile(r"<ref\b[^>]*>.*?</ref>", re.IGNORECASE | re.DOTALL)
 REF_SELF_RE = re.compile(r"<ref\b[^>]*/\s*>", re.IGNORECASE)
 REFERENCES_BLOCK_RE = re.compile(r"<references\b[^>]*>.*?</references>", re.IGNORECASE | re.DOTALL)
 REFERENCES_SELF_RE = re.compile(r"<references\b[^>]*/\s*>", re.IGNORECASE)
+COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 URL_RE = re.compile(r"https?://\S+")
 
 
@@ -64,10 +65,17 @@ def protect_wikitext(text: str) -> PlaceholderResult:
         placeholders[key] = match.group(0)
         return key
 
+    # Protect HTML comments (e.g., BOT_DISCLAIMER markers)
+    def _sub_comment(match: re.Match) -> str:
+        key = f"__PH{len(placeholders)}__"
+        placeholders[key] = match.group(0)
+        return key
+
     text = REFERENCES_BLOCK_RE.sub(_sub_ref, text)
     text = REFERENCES_SELF_RE.sub(_sub_ref, text)
     text = REF_BLOCK_RE.sub(_sub_ref, text)
     text = REF_SELF_RE.sub(_sub_ref, text)
+    text = COMMENT_RE.sub(_sub_comment, text)
 
     # Protect templates and links (balanced)
     template_spans = _extract_balanced(text, "{{", "}}")

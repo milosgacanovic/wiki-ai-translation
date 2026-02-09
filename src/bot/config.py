@@ -29,6 +29,10 @@ class Config:
     gcp_credentials_path: str | None = None
     translate_mark_action: str | None = None
     translate_mark_params: dict[str, str] | None = None
+    disclaimer_anchors: dict[str, dict[str, str]] | None = None
+    disclaimer_marker: str | None = None
+    skip_title_prefixes: tuple[str, ...] = ()
+    skip_translation_subpages: bool = True
 
 
 def load_config() -> Config:
@@ -43,6 +47,33 @@ def load_config() -> Config:
         if not isinstance(data, dict):
             raise RuntimeError("BOT_TRANSLATE_MARK_PARAMS must be a JSON object")
         return {str(k): str(v) for k, v in data.items()}
+
+    def _load_disclaimer_anchors() -> dict[str, dict[str, str]] | None:
+        raw = os.getenv("BOT_DISCLAIMER_ANCHORS")
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("BOT_DISCLAIMER_ANCHORS must be valid JSON") from exc
+        if not isinstance(data, dict):
+            raise RuntimeError("BOT_DISCLAIMER_ANCHORS must be a JSON object")
+        anchors: dict[str, dict[str, str]] = {}
+        for page, value in data.items():
+            if not isinstance(value, dict):
+                raise RuntimeError("BOT_DISCLAIMER_ANCHORS values must be objects")
+            anchors[str(page)] = {str(k): str(v) for k, v in value.items()}
+        return anchors
+
+    def _load_skip_prefixes() -> tuple[str, ...]:
+        raw = os.getenv("BOT_SKIP_TITLE_PREFIXES", "")
+        prefixes = []
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            prefixes.append(part.replace("_", " "))
+        return tuple(prefixes)
 
     def req(name: str) -> str:
         value = os.getenv(name)
@@ -75,5 +106,10 @@ def load_config() -> Config:
         or os.getenv("GCP_CREDENTIALS_JSON"),
         translate_mark_action=os.getenv("BOT_TRANSLATE_MARK_ACTION"),
         translate_mark_params=_load_mark_params(),
+        disclaimer_anchors=_load_disclaimer_anchors(),
+        disclaimer_marker=os.getenv("BOT_DISCLAIMER_MARKER"),
+        skip_title_prefixes=_load_skip_prefixes(),
+        skip_translation_subpages=os.getenv("BOT_SKIP_TRANSLATION_SUBPAGES", "1")
+        not in ("0", "false", "False"),
     )
     return cfg
