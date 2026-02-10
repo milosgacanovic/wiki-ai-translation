@@ -30,8 +30,26 @@ def enqueue_job(
     with conn.cursor() as cur:
         cur.execute(
             """
+            SELECT 1
+            FROM jobs
+            WHERE status = 'queued' AND type = %s AND page_title = %s AND lang = %s
+            LIMIT 1
+            """,
+            (job_type, page_title, lang),
+        )
+        if cur.fetchone():
+            log.info(
+                "skip enqueue duplicate queued job: type=%s page=%s lang=%s",
+                job_type,
+                page_title,
+                lang,
+            )
+            return
+        cur.execute(
+            """
             INSERT INTO jobs (type, page_title, lang, status, priority)
             VALUES (%s, %s, %s, 'queued', %s)
+            ON CONFLICT DO NOTHING
             """,
             (job_type, page_title, lang, priority),
         )

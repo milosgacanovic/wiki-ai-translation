@@ -389,9 +389,35 @@ def _strip_empty_paragraphs(text: str) -> str:
     cleaned = EMPTY_P_RE.sub("", text)
     return cleaned.strip()
 
+def _collapse_blank_lines(text: str) -> str:
+    # Collapse 3+ newlines to 2 and trim leading blank lines.
+    while "\n\n\n" in text:
+        text = text.replace("\n\n\n", "\n\n")
+    return text.lstrip("\n")
+
 
 def _strip_unresolved_placeholders(text: str) -> str:
     return UNRESOLVED_PLACEHOLDER_RE.sub("", text)
+
+
+def _dedupe_displaytitle(text: str) -> str:
+    matches = list(DISPLAYTITLE_RE.finditer(text))
+    if len(matches) <= 1:
+        return text
+    first = matches[0].group(0)
+    # remove all displaytitles, then prepend the first one
+    cleaned = DISPLAYTITLE_RE.sub("", text).strip()
+    return f"{first}\n{cleaned}"
+
+
+def _extract_displaytitle(text: str) -> str | None:
+    match = DISPLAYTITLE_RE.search(text)
+    if not match:
+        return None
+    raw = match.group(0)
+    # {{DISPLAYTITLE:...}}
+    inner = raw.split(":", 1)[-1].rstrip("}").rstrip("}")
+    return inner.strip()
 
 
 def _restore_file_links(source: str, translated: str) -> str:
@@ -531,6 +557,67 @@ def _normalize_leading_directives(text: str) -> str:
         return f"{display}{notoc}{filetag}"
 
     return pattern.sub(_repl, text, count=1)
+
+
+def _normalize_leading_div(text: str) -> str:
+    # Avoid leading blank line/paragraph before a top-level div.
+    text = re.sub(r"(__NOTOC__)\s*\n+\s*(<div\b)", r"\1\n\2", text, count=1)
+    text = re.sub(r"(\{\{DISPLAYTITLE:[^}]+\}\})\s*\n+\s*(__NOTOC__)\s*\n+\s*(<div\b)", r"\1__NOTOC__\3", text, count=1)
+    return text
+
+
+def _normalize_heading_lines(text: str) -> str:
+    def _repl(match: re.Match) -> str:
+        eq = match.group(1)
+        title = match.group(2).strip()
+        return f"\n{eq} {title} {eq}\n"
+
+    return re.sub(r"[ \t]*(={2,6})[ \t]*([^\n]*?)[ \t]*\1[ \t]*", _repl, text)
+
+
+def _strip_heading_list_prefix(text: str) -> str:
+    lines: list[str] = []
+    for line in text.splitlines():
+        if re.match(r"^\s*[*#:;]\s*={2,6}", line):
+            line = re.sub(r"^\s*[*#:;]\s*", "", line)
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _align_list_markers(source: str, translated: str) -> str:
+    source_lines = source.splitlines()
+    translated_lines = translated.splitlines()
+    markers = ("*", "#", ";", ":")
+    fixed = list(translated_lines)
+    t_idx = 0
+    for src_line in source_lines:
+        src_strip = src_line.lstrip()
+        if src_strip == "":
+            continue
+        while t_idx < len(fixed) and fixed[t_idx].strip() == "":
+            t_idx += 1
+        if t_idx >= len(fixed):
+            break
+        tr_strip = fixed[t_idx].lstrip()
+        if src_strip.startswith("="):
+            while t_idx < len(fixed) and not fixed[t_idx].lstrip().startswith("="):
+                t_idx += 1
+                while t_idx < len(fixed) and fixed[t_idx].strip() == "":
+                    t_idx += 1
+            if t_idx >= len(fixed):
+                break
+            t_idx += 1
+            continue
+        if src_strip.startswith(markers):
+            if not tr_strip.startswith(markers):
+                marker = src_strip[0]
+                fixed[t_idx] = f"{marker} {tr_strip}".rstrip()
+            t_idx += 1
+            continue
+        if tr_strip.startswith(markers):
+            fixed[t_idx] = tr_strip.lstrip("*#;:").lstrip()
+        t_idx += 1
+    return "\n".join(fixed)
 
 
 def _is_redirect_wikitext(text: str) -> bool:
@@ -723,17 +810,31 @@ def main() -> None:
     cached_by_key: dict[str, str] = {}
     cached_source_by_key: dict[str, str] = {}
     existing_checksums: dict[str, str] = {}
+    disable_cache = False
     if cfg.pg_dsn and not args.no_cache:
         try:
             with get_conn(cfg.pg_dsn) as conn:
                 existing_checksums = fetch_segment_checksums(conn, norm_title)
         except Exception:
             existing_checksums = {}
+    if existing_checksums:
+        current_keys = {seg.key for seg in segments}
+        if set(existing_checksums.keys()) != current_keys:
+            disable_cache = True
+            logging.getLogger("translate").warning(
+                "segment keys changed for %s; bypassing cache for this run",
+                norm_title,
+            )
 
     for seg in segments:
         checksum = _checksum(seg.text)
         segment_checksums[seg.key] = checksum
-        if not args.no_cache and existing_checksums.get(seg.key) == checksum and cfg.pg_dsn:
+        if (
+            not args.no_cache
+            and not disable_cache
+            and existing_checksums.get(seg.key) == checksum
+            and cfg.pg_dsn
+        ):
             try:
                 with get_conn(cfg.pg_dsn) as conn:
                     cached = fetch_cached_translation(conn, f"{norm_title}::{seg.key}", args.lang)
@@ -840,6 +941,9 @@ def main() -> None:
             restored = _restore_file_links(source_text, restored)
             if termbase_entries:
                 restored = _apply_termbase_safe(restored, termbase_entries)
+            restored = _strip_heading_list_prefix(restored)
+            restored = _normalize_heading_lines(restored)
+            restored = _align_list_markers(source_text, restored)
             restored = _strip_empty_paragraphs(restored)
             restored = _strip_unresolved_placeholders(restored)
             translated_by_key[seg.key] = restored
@@ -853,6 +957,9 @@ def main() -> None:
             if token in restored:
                 restored = restored.replace(token, value)
         restored = _restore_file_links(seg.text, restored)
+        restored = _strip_heading_list_prefix(restored)
+        restored = _normalize_heading_lines(restored)
+        restored = _align_list_markers(seg.text, restored)
         if engine_lang == "sr-Latn":
             restored = sr_cyrillic_to_latin(restored)
         if link_display_translated:
@@ -882,49 +989,77 @@ def main() -> None:
 
     disclaimer = args.disclaimer or _build_disclaimer(norm_title, args.lang)
     inserted = False
-    if cfg.disclaimer_marker:
-        for key in ordered_keys:
-            text = translated_by_key[key]
-            if cfg.disclaimer_marker in text:
-                translated_by_key[key] = _insert_disclaimer(
-                    text, disclaimer, cfg.disclaimer_marker, norm_title, args.lang, cfg.disclaimer_anchors
-                )
-                inserted = True
-                break
+    allow_disclaimer = False
+    if marker_key and marker_key in ordered_keys:
+        allow_disclaimer = True
+    if not cfg.disclaimer_marker and "1" in ordered_keys:
+        allow_disclaimer = True
+    if allow_disclaimer:
+        if cfg.disclaimer_marker:
+            for key in ordered_keys:
+                text = translated_by_key[key]
+                if cfg.disclaimer_marker in text:
+                    translated_by_key[key] = _insert_disclaimer(
+                        text, disclaimer, cfg.disclaimer_marker, norm_title, args.lang, cfg.disclaimer_anchors
+                    )
+                    inserted = True
+                    break
 
-    if not inserted and marker_key and marker_key in translated_by_key:
-        translated_by_key[marker_key] = _insert_disclaimer(
-            translated_by_key[marker_key],
-            disclaimer,
-            cfg.disclaimer_marker,
-            norm_title,
-            args.lang,
-            cfg.disclaimer_anchors,
+        if not inserted and marker_key and marker_key in translated_by_key:
+            translated_by_key[marker_key] = _insert_disclaimer(
+                translated_by_key[marker_key],
+                disclaimer,
+                cfg.disclaimer_marker,
+                norm_title,
+                args.lang,
+                cfg.disclaimer_anchors,
+            )
+            inserted = True
+
+        if not inserted and ordered_keys:
+            first_key = ordered_keys[0]
+            translated_by_key[first_key] = _insert_disclaimer(
+                translated_by_key[first_key],
+                disclaimer,
+                cfg.disclaimer_marker,
+                norm_title,
+                args.lang,
+                cfg.disclaimer_anchors,
+            )
+
+        if cfg.disclaimer_marker:
+            for key in ordered_keys:
+                translated_by_key[key] = translated_by_key[key].replace(cfg.disclaimer_marker, "")
+
+    # Remove any displaytitles from translated segments and add a single one.
+    if ordered_keys and "1" in ordered_keys:
+        displaytitle_value = None
+        try:
+            items = client.get_message_collection(f"page-{norm_title}", args.lang)
+            for item in items:
+                if str(item.get("key", "")) == f"{norm_title.replace(' ', '_')}/Page_display_title":
+                    if item.get("translation"):
+                        displaytitle_value = str(item.get("translation")).strip()
+                    break
+        except Exception:
+            displaytitle_value = None
+        if displaytitle_value is not None or not args.rebuild_only:
+            for key in ordered_keys:
+                translated_by_key[key] = DISPLAYTITLE_RE.sub("", translated_by_key[key]).strip()
+        if displaytitle_value is None and not args.rebuild_only:
+            displaytitle_value = title_translation
+        if displaytitle_value:
+            displaytitle = f"{{{{DISPLAYTITLE:{displaytitle_value}}}}}"
+            translated_by_key["1"] = f"{displaytitle}\n{translated_by_key['1']}"
+        translated_by_key["1"] = _strip_empty_paragraphs(translated_by_key["1"])
+        translated_by_key["1"] = _normalize_leading_directives(
+            translated_by_key["1"]
         )
-        inserted = True
-
-    if not inserted and ordered_keys:
-        first_key = ordered_keys[0]
-        translated_by_key[first_key] = _insert_disclaimer(
-            translated_by_key[first_key],
-            disclaimer,
-            cfg.disclaimer_marker,
-            norm_title,
-            args.lang,
-            cfg.disclaimer_anchors,
+        translated_by_key["1"] = _normalize_leading_div(
+            translated_by_key["1"]
         )
-
-    if cfg.disclaimer_marker:
-        for key in ordered_keys:
-            translated_by_key[key] = translated_by_key[key].replace(cfg.disclaimer_marker, "")
-
-    has_displaytitle = any(DISPLAYTITLE_RE.search(text) for text in source_by_key.values())
-    if ordered_keys and not has_displaytitle:
-        displaytitle = f"{{{{DISPLAYTITLE:{title_translation}}}}}"
-        translated_by_key[ordered_keys[0]] = f"{displaytitle}\n{translated_by_key[ordered_keys[0]]}"
-        translated_by_key[ordered_keys[0]] = _strip_empty_paragraphs(translated_by_key[ordered_keys[0]])
-        translated_by_key[ordered_keys[0]] = _normalize_leading_directives(
-            translated_by_key[ordered_keys[0]]
+        translated_by_key["1"] = _collapse_blank_lines(
+            translated_by_key["1"]
         )
 
     for key in ordered_keys:
@@ -933,6 +1068,9 @@ def main() -> None:
             translated_by_key[key] = _apply_termbase_safe(
                 translated_by_key[key], termbase_entries
             )
+        translated_by_key[key] = _align_list_markers(
+            source_by_key.get(key, ""), translated_by_key[key]
+        )
         translated_by_key[key] = _strip_unresolved_placeholders(translated_by_key[key])
 
     # Final pass after disclaimer/displaytitle insertion
