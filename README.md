@@ -106,6 +106,23 @@ Language codes (for `BOT_TARGET_LANGS`):
 Use `python -m bot.probe_mediawiki` to validate MediaWiki API credentials.
 Use `python -m bot.probe_translate_mark --title "Main_Page"` to probe Translate mark API calls.
 
+## Sidebar Updates (Interface Namespace)
+Localized sidebar navigation can be updated via a dedicated script that edits
+`MediaWiki:Sidebar/{lang}` using the MediaWiki API. The bot account must have
+`editinterface` (or equivalent) rights to update the interface namespace.
+
+Update one language:
+
+```bash
+python -m bot.update_sidebar --lang he
+```
+
+Update all configured sidebar languages:
+
+```bash
+python -m bot.update_sidebar
+```
+
 ## Secrets
 Store Google Cloud service account JSON at `.secrets/wiki-translate-bot.json` and set
 `GCP_CREDENTIALS_PATH`.

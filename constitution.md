@@ -89,9 +89,9 @@ The system must persist at least the following entities:
 2. Categorize errors (API failure, markup error, glossary mismatch, etc.).
 3. Maintain a clear job status lifecycle and retry strategy.
 4. Rate‑limit edits to avoid overwhelming the wiki or translation APIs.
+5. Any edits to interface namespace messages (e.g., `MediaWiki:*`) must be performed via the MediaWiki API and require appropriate permissions (such as `editinterface`).
 
 ## 12. Governance
 1. This constitution is the highest‑priority document for this project.
 2. Any change to requirements must be made in the spec first, then implemented.
 3. The system should remain open‑source friendly and easy to contribute to.
-
