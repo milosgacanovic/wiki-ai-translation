@@ -22,6 +22,7 @@ dev = [
 wiki-translate-bot = "bot.app:main"
 wiki-translate-runner = "bot.runner:main"
 wiki-translate-glossary-sync = "bot.glossary_sync:main"
+wiki-translate-cache-backfill = "bot.cache_backfill:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

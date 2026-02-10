@@ -5,9 +5,17 @@ import json
 import logging
 import time
 import re
+import hashlib
 
 from .config import load_config
-from .db import get_conn, fetch_termbase
+from .db import (
+    get_conn,
+    fetch_termbase,
+    fetch_segment_checksums,
+    fetch_cached_translation,
+    upsert_segment,
+    upsert_translation,
+)
 from .engines.google_v3 import GoogleTranslateV3
 from .logging import configure_logging
 from .mediawiki import MediaWikiClient, MediaWikiError
@@ -40,6 +48,9 @@ REDIRECT_RE = re.compile(r"^\s*#redirect\b", re.IGNORECASE)
 UNRESOLVED_PLACEHOLDER_RE = re.compile(r"__PH\d+__|__LINK\d+__")
 BROKEN_LINK_RE = re.compile(r"\[\[(?:__PH\d+__|__LINK\d+__)\|([^\]]+)\]\]")
 DISPLAYTITLE_RE = re.compile(r"\{\{\s*DISPLAYTITLE\s*:[^}]+\}\}", re.IGNORECASE)
+DISCLAIMER_TABLE_RE = re.compile(
+    r"\{\|\s*class=\"translation-disclaimer\".*?\|\}", re.DOTALL
+)
 
 
 def _is_safe_internal_link(target: str) -> bool:
@@ -400,6 +411,10 @@ def _restore_file_links(source: str, translated: str) -> str:
     return out
 
 
+def _checksum(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def _fix_broken_links(text: str, lang: str) -> str:
     def _repl(match: re.Match) -> str:
         display = match.group(1)
@@ -530,6 +545,8 @@ def _insert_disclaimer(
     lang: str,
     anchors: dict[str, dict[str, str]] | None,
 ) -> str:
+    # Remove any existing disclaimer to prevent duplication.
+    text = DISCLAIMER_TABLE_RE.sub("", text).strip()
     if marker and marker in text:
         return text.replace(marker, f"\n\n{disclaimer}\n\n", 1)
     if anchors and norm_title in anchors and lang in anchors[norm_title]:
@@ -609,6 +626,8 @@ def main() -> None:
     parser.add_argument("--auto-approve", action="store_true")
     parser.add_argument("--approve-only", action="store_true", help="only approve assembled page")
     parser.add_argument("--retry-approve", action="store_true", help="retry approve if assembled page missing")
+    parser.add_argument("--rebuild-only", action="store_true", help="use cached translations only; no MT calls")
+    parser.add_argument("--no-cache", action="store_true", help="ignore cached translations and retranslate")
     parser.add_argument("--auto-review", action="store_true", default=False)
     parser.add_argument("--no-auto-review", action="store_false", dest="auto_review")
     parser.add_argument("--dry-run", action="store_true")
@@ -620,6 +639,9 @@ def main() -> None:
     session = __import__("requests").Session()
     client = MediaWikiClient(cfg.mw_api_url, cfg.mw_user_agent, session)
     client.login(cfg.mw_username, cfg.mw_password)
+
+    if args.rebuild_only and args.no_cache:
+        raise SystemExit("--rebuild-only cannot be used with --no-cache")
 
     if args.approve_only:
         _, norm_title = client.get_page_revision_id(args.title)
@@ -691,40 +713,82 @@ def main() -> None:
 
     no_translate_terms = _build_no_translate_terms(termbase_entries)
 
-    project_id = _resolve_project_id(cfg.gcp_project_id, cfg.gcp_credentials_path)
-    if not project_id:
-        raise SystemExit("GCP project id is required (set GCP_PROJECT_ID or ensure in credentials)")
+    segments = sorted(segments, key=lambda s: int(s.key))
+    if args.start_key is not None:
+        segments = [s for s in segments if int(s.key) >= args.start_key]
+    if args.max_keys is not None and args.max_keys > 0:
+        segments = segments[: args.max_keys]
 
-    engine = GoogleTranslateV3(
-        project_id=project_id,
-        location=cfg.gcp_location,
-        credentials_path=cfg.gcp_credentials_path,
-    )
-    glossary_id = None
-    if cfg.gcp_glossaries:
-        glossary_id = cfg.gcp_glossaries.get(args.lang)
+    segment_checksums: dict[str, str] = {}
+    cached_by_key: dict[str, str] = {}
+    cached_source_by_key: dict[str, str] = {}
+    existing_checksums: dict[str, str] = {}
+    if cfg.pg_dsn and not args.no_cache:
+        try:
+            with get_conn(cfg.pg_dsn) as conn:
+                existing_checksums = fetch_segment_checksums(conn, norm_title)
+        except Exception:
+            existing_checksums = {}
 
-    # Translate page title for DISPLAYTITLE
+    for seg in segments:
+        checksum = _checksum(seg.text)
+        segment_checksums[seg.key] = checksum
+        if not args.no_cache and existing_checksums.get(seg.key) == checksum and cfg.pg_dsn:
+            try:
+                with get_conn(cfg.pg_dsn) as conn:
+                    cached = fetch_cached_translation(conn, f"{norm_title}::{seg.key}", args.lang)
+                if cached:
+                    cached_by_key[seg.key] = cached
+                    cached_source_by_key[seg.key] = "db"
+            except Exception:
+                pass
+        if args.rebuild_only and seg.key not in cached_by_key:
+            unit_title = f"Translations:{norm_title}/{seg.key}/{args.lang}"
+            try:
+                unit_text, _, _ = client.get_page_wikitext(unit_title)
+                if unit_text.strip():
+                    cached_by_key[seg.key] = unit_text
+                    cached_source_by_key[seg.key] = "wiki"
+            except MediaWikiError:
+                pass
+
+    to_translate = [seg for seg in segments if seg.key not in cached_by_key]
+    if args.rebuild_only and to_translate:
+        missing = ", ".join(seg.key for seg in to_translate)
+        raise SystemExit(f"rebuild-only: missing cached translations for keys {missing}")
+
     engine_lang = args.engine_lang or args.lang
+    engine = None
+    glossary_id = None
+    if to_translate:
+        project_id = _resolve_project_id(cfg.gcp_project_id, cfg.gcp_credentials_path)
+        if not project_id:
+            raise SystemExit("GCP project id is required (set GCP_PROJECT_ID or ensure in credentials)")
+        engine = GoogleTranslateV3(
+            project_id=project_id,
+            location=cfg.gcp_location,
+            credentials_path=cfg.gcp_credentials_path,
+        )
+        if cfg.gcp_glossaries:
+            glossary_id = cfg.gcp_glossaries.get(args.lang)
+
+    # Translate page title for DISPLAYTITLE (only if MT is enabled)
     title_translation = None
     for term, preferred in no_translate_terms:
         if norm_title.strip().lower() == term.strip().lower():
             title_translation = preferred
             break
     if title_translation is None:
-        title_translation = engine.translate(
-            [norm_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
-        )[0].text
+        if engine is not None:
+            title_translation = engine.translate(
+                [norm_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
+            )[0].text
+        else:
+            title_translation = norm_title
     if engine_lang == "sr-Latn":
         title_translation = sr_cyrillic_to_latin(title_translation)
     if termbase_entries:
         title_translation = _apply_termbase(title_translation, termbase_entries)
-
-    segments = sorted(segments, key=lambda s: int(s.key))
-    if args.start_key is not None:
-        segments = [s for s in segments if int(s.key) >= args.start_key]
-    if args.max_keys is not None and args.max_keys > 0:
-        segments = segments[: args.max_keys]
 
     protected = []
     link_display_requests: dict[str, str] = {}
@@ -735,8 +799,11 @@ def main() -> None:
         if cfg.disclaimer_marker and cfg.disclaimer_marker in seg.text and marker_key is None:
             marker_key = seg.key
         link_text, link_placeholders, link_meta, seg_targets = _tokenize_links(seg.text, args.lang)
-        link_text, no_translate_placeholders = _protect_terms(link_text, no_translate_terms)
         source_targets.update(seg_targets)
+        source_by_key[seg.key] = seg.text
+        if seg.key in cached_by_key:
+            continue
+        link_text, no_translate_placeholders = _protect_terms(link_text, no_translate_terms)
         result = protect_wikitext(link_text, protect_links=False)
         result.placeholders.update(link_placeholders)
         result.placeholders.update(no_translate_placeholders)
@@ -744,15 +811,19 @@ def main() -> None:
             if _should_translate_display(display, no_translate_terms):
                 link_display_requests[target] = display
         protected.append((seg, result))
-        source_by_key[seg.key] = seg.text
 
-    translated = engine.translate(
-        [p.text for _, p in protected], cfg.source_lang, engine_lang, glossary_id=glossary_id
-    )
+    translated = []
+    if protected and engine is not None:
+        translated = engine.translate(
+            [p.text for _, p in protected], cfg.source_lang, engine_lang, glossary_id=glossary_id
+        )
+    protected_map: dict[str, tuple[object, object]] = {}
+    for (seg, ph), tr in zip(protected, translated):
+        protected_map[seg.key] = (ph, tr)
 
     # Translate link display texts to ensure localized anchors
     link_display_translated: dict[str, str] = {}
-    if link_display_requests:
+    if link_display_requests and engine is not None:
         displays = list(link_display_requests.values())
         translated_displays = engine.translate(
             displays, cfg.source_lang, engine_lang, glossary_id=glossary_id
@@ -762,7 +833,20 @@ def main() -> None:
 
     translated_by_key: dict[str, str] = {}
     ordered_keys: list[str] = []
-    for idx, ((seg, ph), tr) in enumerate(zip(protected, translated)):
+    for seg in segments:
+        if seg.key in cached_by_key:
+            restored = cached_by_key[seg.key]
+            source_text = source_by_key.get(seg.key, "")
+            restored = _restore_file_links(source_text, restored)
+            if termbase_entries:
+                restored = _apply_termbase_safe(restored, termbase_entries)
+            restored = _strip_empty_paragraphs(restored)
+            restored = _strip_unresolved_placeholders(restored)
+            translated_by_key[seg.key] = restored
+            ordered_keys.append(seg.key)
+            continue
+
+        ph, tr = protected_map[seg.key]
         restored = restore_wikitext(tr.text, ph.placeholders)
         # Safety: restore any leftover placeholders in case MT preserved tokens
         for token, value in ph.placeholders.items():
@@ -871,6 +955,21 @@ def main() -> None:
         if args.auto_review and newrev:
             client.translation_review(newrev)
             logging.getLogger("translate").info("reviewed %s", unit_title)
+        if cfg.pg_dsn:
+            try:
+                with get_conn(cfg.pg_dsn) as conn:
+                    upsert_segment(
+                        conn,
+                        norm_title,
+                        key,
+                        source_text,
+                        segment_checksums.get(key, _checksum(source_text)),
+                    )
+                    segment_key = f"{norm_title}::{key}"
+                    engine_used = cached_source_by_key.get(key, cfg.mt_primary)
+                    upsert_translation(conn, segment_key, args.lang, restored, engine_used)
+            except Exception:
+                pass
         if args.sleep_ms > 0:
             time.sleep(args.sleep_ms / 1000.0)
 

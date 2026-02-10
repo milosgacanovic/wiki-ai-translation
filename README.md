@@ -131,6 +131,27 @@ Print last run summary (JSON):
 wiki-translate-runner --report-last
 ```
 
+## Translation Cache
+The bot caches translations in Postgres (`segments` + `translations`) to avoid repeat MT costs.
+
+Backfill the cache from existing Translate units (no MT calls):
+
+```bash
+wiki-translate-cache-backfill
+```
+
+Rebuild pages using cached translations only (no MT calls):
+
+```bash
+wiki-translate-runner --run-all --rebuild-only
+```
+
+Force re-translate (ignore cache):
+
+```bash
+wiki-translate-runner --run-all --no-cache
+```
+
 ## Ingestion
 Backfill all main namespace pages (wraps with `<translate>` if needed and enqueues jobs):
 

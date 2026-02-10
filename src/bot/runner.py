@@ -80,6 +80,10 @@ def process_queue(
                     ]
                     if max_keys is not None and max_keys > 0:
                         sys.argv.extend(["--max-keys", str(max_keys)])
+                    if args.no_cache:
+                        sys.argv.append("--no-cache")
+                    if args.rebuild_only:
+                        sys.argv.append("--rebuild-only")
                     translate_page_main()
                     if run_id is not None:
                         log_item(conn, run_id, "translate", "ok", job.page_title, job.lang, None)
@@ -133,6 +137,8 @@ def main() -> None:
     parser.add_argument("--plan", action="store_true", help="dry-run: show how many translations would be queued")
     parser.add_argument("--report-last", action="store_true", help="print last run summary as JSON")
     parser.add_argument("--retry-approve", action="store_true", help="retry approvals for assembled pages")
+    parser.add_argument("--no-cache", action="store_true", help="ignore cached translations and retranslate")
+    parser.add_argument("--rebuild-only", action="store_true", help="use cached translations only; no MT calls")
     parser.add_argument("--poll", action="store_true", help="run recentchanges poller")
     args, _ = parser.parse_known_args()
 
@@ -179,6 +185,9 @@ def main() -> None:
             )
         print(f"would_queue_pages={len(plan_pages)}")
         return
+
+    if args.no_cache and args.rebuild_only:
+        raise SystemExit("--no-cache cannot be used with --rebuild-only")
 
     if args.report_last:
         with get_conn(cfg.pg_dsn) as conn:
@@ -266,6 +275,10 @@ def main() -> None:
             ]
             if args.max_keys is not None and args.max_keys > 0:
                 sys.argv.extend(["--max-keys", str(args.max_keys)])
+            if args.no_cache:
+                sys.argv.append("--no-cache")
+            if args.rebuild_only:
+                sys.argv.append("--rebuild-only")
             translate_page_main()
         return
 

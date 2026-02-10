@@ -16,6 +16,8 @@ services:
       dockerfile: docker/Dockerfile
     env_file:
       - .env
+    environment:
+      PYTHONPATH: /app/src
     depends_on:
       - db
     volumes:
