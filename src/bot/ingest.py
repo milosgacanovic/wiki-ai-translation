@@ -121,6 +121,7 @@ def ingest_title(
 
     unit_keys = client.list_translation_unit_keys(norm_title)
     if unit_keys:
+        source_changed = not page_record or page_record.last_source_rev != rev_id
         if not force and page_record and page_record.last_source_rev == rev_id:
             if dry_run:
                 queued = 0
@@ -143,6 +144,31 @@ def ingest_title(
             else:
                 _record("skip", "units exist; no source changes")
             return
+        if source_changed and cfg.translate_mark_action:
+            params = dict(cfg.translate_mark_params or {})
+            params = _apply_placeholders(params, norm_title, rev_id)
+            if "title" not in params and "page" not in params and "target" not in params:
+                params["page"] = norm_title
+            if "revision" not in params:
+                params["revision"] = str(rev_id)
+            if "token" not in params:
+                params["token"] = client.csrf_token
+            params["action"] = cfg.translate_mark_action
+            log.info(
+                "refreshing translation units via %s for %s rev=%s",
+                cfg.translate_mark_action,
+                norm_title,
+                rev_id,
+            )
+            if not dry_run:
+                try:
+                    client._request("POST", params)
+                except MediaWikiError as exc:
+                    log.error("translate mark API failed: %s", exc)
+                    _record("error", f"mark for translation failed: {exc}")
+                    return
+            else:
+                _record("ok", "would mark for translation")
         if not dry_run:
             enqueue_translations(cfg, conn, norm_title)
         _record("ok", "units already exist; queued translation")

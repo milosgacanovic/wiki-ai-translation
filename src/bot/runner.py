@@ -42,6 +42,8 @@ def process_queue(
     run_id: int | None = None,
     progress: dict[str, int] | None = None,
     max_keys: int | None = None,
+    no_cache: bool = False,
+    rebuild_only: bool = False,
 ) -> None:
     with get_conn(cfg.pg_dsn) as conn:
         jobs = next_jobs(conn, limit=5)
@@ -81,9 +83,9 @@ def process_queue(
                     ]
                     if max_keys is not None and max_keys > 0:
                         sys.argv.extend(["--max-keys", str(max_keys)])
-                    if args.no_cache:
+                    if no_cache:
                         sys.argv.append("--no-cache")
-                    if args.rebuild_only:
+                    if rebuild_only:
                         sys.argv.append("--rebuild-only")
                     translate_page_main()
                     if run_id is not None:
@@ -243,7 +245,7 @@ def main() -> None:
                 with get_conn(cfg.pg_dsn) as conn:
                     if not next_jobs(conn, limit=1):
                         break
-                process_queue(cfg, client, run_id=run_id, progress=progress, max_keys=args.max_keys)
+                process_queue(cfg, client, run_id=run_id, progress=progress, max_keys=args.max_keys, no_cache=args.no_cache, rebuild_only=args.rebuild_only)
             if args.retry_approve:
                 retry_approve_from_run(cfg, client, run_id, run_id)
             with get_conn(cfg.pg_dsn) as conn:
@@ -307,7 +309,7 @@ def main() -> None:
             with get_conn(cfg.pg_dsn) as conn:
                 if not next_jobs(conn, limit=1):
                     break
-            process_queue(cfg, client, run_id=run_id, progress=progress, max_keys=args.max_keys)
+            process_queue(cfg, client, run_id=run_id, progress=progress, max_keys=args.max_keys, no_cache=args.no_cache, rebuild_only=args.rebuild_only)
         with get_conn(cfg.pg_dsn) as conn:
             finish_run(conn, run_id, "done")
             report_path = write_report_file(conn, run_id)
@@ -318,7 +320,7 @@ def main() -> None:
         run_poll_loop(cfg, client)
         return
 
-    process_queue(cfg, client, max_keys=args.max_keys)
+    process_queue(cfg, client, max_keys=args.max_keys, no_cache=args.no_cache, rebuild_only=args.rebuild_only)
 
 
 if __name__ == "__main__":
