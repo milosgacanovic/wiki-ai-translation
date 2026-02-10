@@ -57,6 +57,27 @@ def enqueue_translations(cfg: Config, conn, title: str) -> None:
         enqueue_job(conn, "translate_page", title, lang, priority=0)
 
 
+def enqueue_missing_translations(cfg: Config, client: MediaWikiClient, conn, title: str) -> int:
+    queued = 0
+    group_id = f"page-{title}"
+    for lang in cfg.target_langs:
+        try:
+            missing_units = client.count_missing_translations(group_id, lang)
+        except Exception:
+            missing_units = 0
+        if missing_units > 0:
+            enqueue_job(conn, "translate_page", title, lang, priority=0)
+            queued += 1
+            continue
+        try:
+            client.get_page_revision_id(f"{title}/{lang}")
+            continue
+        except MediaWikiError:
+            enqueue_job(conn, "translate_page", title, lang, priority=0)
+            queued += 1
+    return queued
+
+
 def _apply_placeholders(params: dict[str, str], title: str, revision: int) -> dict[str, str]:
     out: dict[str, str] = {}
     for key, value in params.items():
@@ -70,16 +91,24 @@ def ingest_title(
     conn,
     title: str,
     record=None,
+    force: bool = False,
+    dry_run: bool = False,
 ) -> None:
     record_cb = record
+    would_queue = False
 
     def _record(status: str, message: str) -> None:
         if record_cb is not None:
             record_cb("ingest", status, title, None, message)
 
+    def _record_plan_queue() -> None:
+        if dry_run and would_queue and record_cb is not None:
+            record_cb("plan", "queue", title, None, "would queue translation")
+
     rev_id, norm_title = client.get_page_revision_id(title)
     page_record = get_page(conn, norm_title)
-    upsert_page(conn, norm_title, cfg.source_lang, rev_id)
+    if not dry_run:
+        upsert_page(conn, norm_title, cfg.source_lang, rev_id)
 
     if should_skip_title(norm_title, cfg.skip_title_prefixes):
         log.info("skip translation for %s due to prefix rule", norm_title)
@@ -92,15 +121,33 @@ def ingest_title(
 
     unit_keys = client.list_translation_unit_keys(norm_title)
     if unit_keys:
-        if page_record and page_record.last_source_rev == rev_id:
-            _record("skip", "units exist; no source changes")
+        if not force and page_record and page_record.last_source_rev == rev_id:
+            if dry_run:
+                queued = 0
+                group_id = f"page-{norm_title}"
+                for lang in cfg.target_langs:
+                    missing_units = client.count_missing_translations(group_id, lang)
+                    if missing_units > 0:
+                        queued += 1
+                        continue
+                    try:
+                        client.get_page_revision_id(f"{norm_title}/{lang}")
+                    except MediaWikiError:
+                        queued += 1
+            else:
+                queued = enqueue_missing_translations(cfg, client, conn, norm_title)
+            if queued:
+                _record("ok", "units exist; queued missing translations")
+                would_queue = True
+                _record_plan_queue()
+            else:
+                _record("skip", "units exist; no source changes")
             return
-        enqueue_translations(cfg, conn, norm_title)
+        if not dry_run:
+            enqueue_translations(cfg, conn, norm_title)
         _record("ok", "units already exist; queued translation")
-        return
-
-    if page_record and page_record.last_source_rev == rev_id:
-        _record("skip", "no source changes detected")
+        would_queue = True
+        _record_plan_queue()
         return
 
     if not is_main_namespace(norm_title):
@@ -123,15 +170,19 @@ def ingest_title(
         log.info("page already wrapped but no units yet: %s", norm_title)
         _record("ok", "already wrapped")
     else:
-        wrapped = wrap_with_translate(wikitext)
-        summary = "Wrap page in <translate> for machine translation"
-        client.edit(norm_title, wrapped, summary, bot=True)
-        log.info("wrapped page for translation: %s", norm_title)
-        _record("ok", "wrapped")
+        if not dry_run:
+            wrapped = wrap_with_translate(wikitext)
+            summary = "Wrap page in <translate> for machine translation"
+            client.edit(norm_title, wrapped, summary, bot=True)
+            log.info("wrapped page for translation: %s", norm_title)
+            _record("ok", "wrapped")
 
-        new_rev_id, _ = client.get_page_revision_id(norm_title)
-        rev_id = new_rev_id
-        upsert_page(conn, norm_title, cfg.source_lang, new_rev_id)
+            new_rev_id, _ = client.get_page_revision_id(norm_title)
+            rev_id = new_rev_id
+            upsert_page(conn, norm_title, cfg.source_lang, new_rev_id)
+        else:
+            _record("ok", "would wrap")
+            would_queue = True
 
     if cfg.translate_mark_action:
         params = dict(cfg.translate_mark_params or {})
@@ -144,28 +195,37 @@ def ingest_title(
             params["token"] = client.csrf_token
         params["action"] = cfg.translate_mark_action
         log.info("calling translate mark action=%s page=%s rev=%s", cfg.translate_mark_action, norm_title, rev_id)
-        try:
-            client._request("POST", params)
-        except MediaWikiError as exc:
-            log.error("translate mark API failed: %s", exc)
-            _record("error", f"mark for translation failed: {exc}")
-            return
-
-        for _ in range(5):
-            unit_keys = client.list_translation_unit_keys(norm_title)
-            if unit_keys:
-                enqueue_translations(cfg, conn, norm_title)
-                _record("ok", "units created; queued translation")
+        if not dry_run:
+            try:
+                client._request("POST", params)
+            except MediaWikiError as exc:
+                log.error("translate mark API failed: %s", exc)
+                _record("error", f"mark for translation failed: {exc}")
                 return
-            time.sleep(0.5)
+        else:
+            _record("ok", "would mark for translation")
+            would_queue = True
+
+        if not dry_run:
+            for _ in range(5):
+                unit_keys = client.list_translation_unit_keys(norm_title)
+                if unit_keys:
+                    enqueue_translations(cfg, conn, norm_title)
+                    _record("ok", "units created; queued translation")
+                    _record_plan_queue()
+                    return
+                time.sleep(0.5)
 
     unit_keys = client.list_translation_unit_keys(norm_title)
     if unit_keys:
-        enqueue_translations(cfg, conn, norm_title)
+        if not dry_run:
+            enqueue_translations(cfg, conn, norm_title)
         _record("ok", "units created; queued translation")
+        would_queue = True
     else:
         log.info("no translation units detected after wrap: %s", norm_title)
         _record("error", "no translation units detected after wrap")
+    _record_plan_queue()
 
 
 def ingest_all(
@@ -175,6 +235,8 @@ def ingest_all(
     sleep_ms: int = 0,
     limit: int | None = None,
     record=None,
+    force: bool = False,
+    dry_run: bool = False,
 ) -> None:
     cursor = get_ingest_cursor(conn, "main")
     processed = 0
@@ -184,18 +246,20 @@ def ingest_all(
             break
         for title in titles:
             try:
-                ingest_title(cfg, client, conn, title, record=record)
+                ingest_title(cfg, client, conn, title, record=record, force=force, dry_run=dry_run)
             except Exception as exc:
                 log.error("ingest failed for %s: %s", title, exc)
                 if record is not None:
                     record("ingest", "error", title, None, f"exception: {exc}")
             processed += 1
             if limit is not None and processed >= limit:
-                set_ingest_cursor(conn, "main", cursor)
+                if not dry_run:
+                    set_ingest_cursor(conn, "main", cursor)
                 return
             if sleep_ms > 0:
                 time.sleep(sleep_ms / 1000.0)
         cursor = next_cursor
-        set_ingest_cursor(conn, "main", cursor)
+        if not dry_run:
+            set_ingest_cursor(conn, "main", cursor)
         if not cursor:
             break

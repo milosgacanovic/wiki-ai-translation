@@ -80,6 +80,52 @@ def count_jobs(
         return int(cur.fetchone()[0])
 
 
+def delete_jobs_not_in_langs(
+    conn: psycopg.Connection, langs: Iterable[str], job_type: str | None = None
+) -> int:
+    lang_list = list(langs)
+    if not lang_list:
+        return 0
+    with conn.cursor() as cur:
+        if job_type:
+            cur.execute(
+                """
+                DELETE FROM jobs
+                WHERE status = 'queued' AND type = %s AND lang <> ALL(%s)
+                """,
+                (job_type, lang_list),
+            )
+        else:
+            cur.execute(
+                """
+                DELETE FROM jobs
+                WHERE status = 'queued' AND lang <> ALL(%s)
+                """,
+                (lang_list,),
+            )
+        return int(cur.rowcount)
+
+
+def delete_queued_jobs(conn: psycopg.Connection, job_type: str | None = None) -> int:
+    with conn.cursor() as cur:
+        if job_type:
+            cur.execute(
+                """
+                DELETE FROM jobs
+                WHERE status = 'queued' AND type = %s
+                """,
+                (job_type,),
+            )
+        else:
+            cur.execute(
+                """
+                DELETE FROM jobs
+                WHERE status = 'queued'
+                """
+            )
+        return int(cur.rowcount)
+
+
 def mark_job_done(conn: psycopg.Connection, job_id: int) -> None:
     with conn.cursor() as cur:
         cur.execute(

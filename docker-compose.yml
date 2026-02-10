@@ -19,6 +19,7 @@ services:
     depends_on:
       - db
     volumes:
+      - .:/app
       - ./.secrets:/app/.secrets:ro
 
 volumes:

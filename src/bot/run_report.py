@@ -173,6 +173,22 @@ def fetch_items_by_status(conn, run_id: int) -> dict[str, list[dict[str, str | N
     return items
 
 
+def fetch_translate_ok_pairs(conn, run_id: int) -> list[tuple[str, str]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT page_title, lang
+            FROM run_items
+            WHERE run_id = %s AND kind = 'translate' AND status = 'ok'
+              AND page_title IS NOT NULL AND lang IS NOT NULL
+            ORDER BY page_title, lang
+            """,
+            (run_id,),
+        )
+        rows = cur.fetchall()
+    return [(str(r[0]), str(r[1])) for r in rows]
+
+
 def fetch_stats(conn, run_id: int) -> dict[str, int]:
     stats: dict[str, int] = {}
     with conn.cursor() as cur:

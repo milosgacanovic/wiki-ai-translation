@@ -321,6 +321,8 @@ def main() -> None:
     parser.add_argument("--max-keys", type=int, default=None)
     parser.add_argument("--sleep-ms", type=int, default=200)
     parser.add_argument("--auto-approve", action="store_true")
+    parser.add_argument("--approve-only", action="store_true", help="only approve assembled page")
+    parser.add_argument("--retry-approve", action="store_true", help="retry approve if assembled page missing")
     parser.add_argument("--auto-review", action="store_true", default=False)
     parser.add_argument("--no-auto-review", action="store_false", dest="auto_review")
     parser.add_argument("--dry-run", action="store_true")
@@ -332,6 +334,34 @@ def main() -> None:
     session = __import__("requests").Session()
     client = MediaWikiClient(cfg.mw_api_url, cfg.mw_user_agent, session)
     client.login(cfg.mw_username, cfg.mw_password)
+
+    if args.approve_only:
+        _, norm_title = client.get_page_revision_id(args.title)
+        assembled_title = f"{norm_title}/{args.lang}"
+        backoff = [1, 2, 4, 8] if args.retry_approve else []
+        attempts = len(backoff) + 1
+        for idx in range(attempts):
+            try:
+                _, assembled_rev, _ = client.get_page_wikitext(assembled_title)
+                client.approve_revision(assembled_rev)
+                logging.getLogger("translate").info(
+                    "approved assembled page %s", assembled_title
+                )
+                return {"approve_status": "approved"}
+            except MediaWikiError as exc:
+                if "no revisions" in str(exc).lower():
+                    if idx < len(backoff):
+                        wait = backoff[idx]
+                        logging.getLogger("translate").warning(
+                            "approve retry: %s (waiting %ss)", exc, wait
+                        )
+                        time.sleep(wait)
+                        continue
+                    logging.getLogger("translate").warning(
+                        "skip approve: %s", exc
+                    )
+                    return {"approve_status": "no_revisions"}
+                raise
 
     wikitext, rev_id, norm_title = client.get_page_wikitext(args.title)
     if _is_redirect_wikitext(wikitext):

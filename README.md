@@ -24,6 +24,77 @@ Tip: for testing, set `BOT_TARGET_LANGS=sr` to limit translations to Serbian.
 ## Status
 Bootstrap phase.
 
+## Target Languages
+Planned translation languages for production:
+- English
+- German
+- Dutch
+- French
+- Spanish
+- Italian
+- Hebrew
+- Danish
+- Portuguese
+- Polish
+- Greek
+- Hungarian
+- Swedish
+- Finnish
+- Slovak
+- Croatian
+- Indonesian
+- Arabic
+- Hindi
+- Norwegian
+- Czech
+- Korean
+- Japanese
+- Georgian
+- Serbian
+- Romanian
+- Slovenian
+- Luxembourgish
+- Thai
+- Icelandic
+- Vietnamese
+- Zulu
+- Chinese
+
+Language codes (for `BOT_TARGET_LANGS`):
+- English: `en`
+- German: `de`
+- Dutch: `nl`
+- French: `fr`
+- Spanish: `es`
+- Italian: `it`
+- Hebrew: `he`
+- Danish: `da`
+- Portuguese: `pt`
+- Polish: `pl`
+- Greek: `el`
+- Hungarian: `hu`
+- Swedish: `sv`
+- Finnish: `fi`
+- Slovak: `sk`
+- Croatian: `hr`
+- Indonesian: `id`
+- Arabic: `ar`
+- Hindi: `hi`
+- Norwegian: `no`
+- Czech: `cs`
+- Korean: `ko`
+- Japanese: `ja`
+- Georgian: `ka`
+- Serbian: `sr`
+- Romanian: `ro`
+- Slovenian: `sl`
+- Luxembourgish: `lb`
+- Thai: `th`
+- Icelandic: `is`
+- Vietnamese: `vi`
+- Zulu: `zu`
+- Chinese: `zh`
+
 ## Resilience
 - Automatic backoff on API rate limits: 1s, 2s, 4s, 8s (max 5 attempts).
 

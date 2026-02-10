@@ -202,6 +202,25 @@ class MediaWikiClient:
                 break
         return items
 
+    def count_missing_translations(self, group_id: str, lang: str) -> int:
+        try:
+            items = self.get_message_collection(group_id, lang)
+        except MediaWikiError as exc:
+            message = str(exc)
+            if 'Invalid value for parameter "mcgroup"' in message:
+                return 0
+            raise
+        missing = 0
+        for item in items:
+            key = str(item.get("key") or "")
+            unit_key = key.split("/")[-1]
+            if not unit_key.isdigit():
+                continue
+            translation = item.get("translation")
+            if translation is None or str(translation).strip() == "":
+                missing += 1
+        return missing
+
     def site_info(self) -> dict[str, Any]:
         data = self._request("GET", {"action": "query", "meta": "siteinfo", "siprop": "general"})
         return data["query"]["general"]
