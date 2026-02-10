@@ -94,6 +94,211 @@ DISCALIMER_TEXT_BY_LANG = {
         "Questa traduzione può contenere errori o imprecisioni. "
         "<br />Puoi aiutare a migliorarla {link}."
     ),
+    "de": (
+        "Diese Seite wurde automatisch übersetzt. "
+        "Diese Übersetzung kann Fehler oder Ungenauigkeiten enthalten. "
+        "<br />Sie können helfen, sie zu verbessern, indem Sie {link}."
+    ),
+    "es": (
+        "Esta página fue traducida automáticamente. "
+        "Esta traducción puede contener errores o inexactitudes. "
+        "<br />Puedes ayudar a mejorarla {link}."
+    ),
+    "fr": (
+        "Cette page a été traduite automatiquement. "
+        "Cette traduction peut contenir des erreurs ou des imprécisions. "
+        "<br />Vous pouvez aider à l'améliorer en {link}."
+    ),
+    "nl": (
+        "Deze pagina is automatisch vertaald. "
+        "Deze vertaling kan fouten of onnauwkeurigheden bevatten. "
+        "<br />Je kunt helpen om het te verbeteren door {link}."
+    ),
+    "he": (
+        "דף זה תורגם אוטומטית. "
+        "תרגום זה עשוי להכיל שגיאות או אי־דיוקים. "
+        "<br />אפשר לעזור לשפר אותו על ידי {link}."
+    ),
+    "da": (
+        "Denne side blev oversat automatisk. "
+        "Denne oversættelse kan indeholde fejl eller unøjagtigheder. "
+        "<br />Du kan hjælpe med at forbedre den ved at {link}."
+    ),
+    "pt": (
+        "Esta página foi traduzida automaticamente. "
+        "Esta tradução pode conter erros ou imprecisões. "
+        "<br />Você pode ajudar a melhorá-la {link}."
+    ),
+    "pl": (
+        "Ta strona została przetłumaczona automatycznie. "
+        "To tłumaczenie może zawierać błędy lub nieścisłości. "
+        "<br />Możesz pomóc ją poprawić, {link}."
+    ),
+    "el": (
+        "Αυτή η σελίδα μεταφράστηκε αυτόματα. "
+        "Αυτή η μετάφραση μπορεί να περιέχει λάθη ή ανακρίβειες. "
+        "<br />Μπορείτε να βοηθήσετε να βελτιωθεί {link}."
+    ),
+    "hu": (
+        "Ezt az oldalt automatikusan lefordítottuk. "
+        "Ez a fordítás hibákat vagy pontatlanságokat tartalmazhat. "
+        "<br />Segíthet javítani rajta, ha {link}."
+    ),
+    "sv": (
+        "Den här sidan översattes automatiskt. "
+        "Den här översättningen kan innehålla fel eller felaktigheter. "
+        "<br />Du kan hjälpa till att förbättra den genom att {link}."
+    ),
+    "fi": (
+        "Tämä sivu on käännetty automaattisesti. "
+        "Tämä käännös voi sisältää virheitä tai epätarkkuuksia. "
+        "<br />Voit auttaa parantamaan sitä {link}."
+    ),
+    "sk": (
+        "Táto stránka bola automaticky preložená. "
+        "Tento preklad môže obsahovať chyby alebo nepresnosti. "
+        "<br />Môžete pomôcť zlepšiť ho {link}."
+    ),
+    "hr": (
+        "Ova stranica je automatski prevedena. "
+        "Ovaj prijevod može sadržavati pogreške ili netočnosti. "
+        "<br />Možete pomoći da se poboljša {link}."
+    ),
+    "id": (
+        "Halaman ini diterjemahkan secara otomatis. "
+        "Terjemahan ini mungkin mengandung kesalahan atau ketidakakuratan. "
+        "<br />Anda dapat membantu memperbaikinya dengan {link}."
+    ),
+    "ar": (
+        "تمت ترجمة هذه الصفحة تلقائياً. "
+        "قد تحتوي هذه الترجمة على أخطاء أو عدم دقة. "
+        "<br />يمكنك المساعدة في تحسينها عبر {link}."
+    ),
+    "hi": (
+        "यह पृष्ठ स्वचालित रूप से अनुवादित किया गया है। "
+        "इस अनुवाद में त्रुटियाँ या अशुद्धियाँ हो सकती हैं। "
+        "<br />आप इसे बेहतर बनाने में मदद कर सकते हैं, {link}."
+    ),
+    "no": (
+        "Denne siden ble automatisk oversatt. "
+        "Denne oversettelsen kan inneholde feil eller unøyaktigheter. "
+        "<br />Du kan hjelpe til med å forbedre den ved å {link}."
+    ),
+    "cs": (
+        "Tato stránka byla automaticky přeložena. "
+        "Tento překlad může obsahovat chyby nebo nepřesnosti. "
+        "<br />Můžete pomoci ji zlepšit {link}."
+    ),
+    "ko": (
+        "이 페이지는 자동 번역되었습니다. "
+        "이 번역에는 오류나 부정확한 내용이 있을 수 있습니다. "
+        "<br />{link}을 통해 개선하는 데 도움을 줄 수 있습니다."
+    ),
+    "ja": (
+        "このページは自動翻訳されました。"
+        "この翻訳には誤りや不正確さが含まれる場合があります。"
+        "<br />{link}ことで改善に協力できます。"
+    ),
+    "ka": (
+        "ეს გვერდი ავტომატურად იქნა თარგმნილი. "
+        "ამ თარგმანს შეიძლება ჰქონდეს შეცდომები ან უზუსტობები. "
+        "<br />შეგიძლიათ დაგვეხმაროთ გაუმჯობესებაში {link}."
+    ),
+    "ro": (
+        "Această pagină a fost tradusă automat. "
+        "Această traducere poate conține erori sau inexactități. "
+        "<br />Poți ajuta la îmbunătățire {link}."
+    ),
+    "sl": (
+        "Ta stran je bila samodejno prevedena. "
+        "Ta prevod lahko vsebuje napake ali netočnosti. "
+        "<br />Pomagate lahko pri izboljšavi z {link}."
+    ),
+    "lb": (
+        "Dës Säit gouf automatesch iwwersat. "
+        "Dës Iwwersetzung kann Feeler oder Ongenauegkeeten enthalen. "
+        "<br />Dir kënnt hëllefen se ze verbesseren andeems Dir {link}."
+    ),
+    "th": (
+        "หน้านี้ถูกแปลโดยอัตโนมัติ "
+        "การแปลนี้อาจมีข้อผิดพลาดหรือความไม่ถูกต้อง "
+        "<br />คุณสามารถช่วยปรับปรุงได้โดย {link}."
+    ),
+    "is": (
+        "Þessi síða var sjálfvirkt þýdd. "
+        "Þessi þýðing kann innihaldið villur eða ónákvæmni. "
+        "<br />Þú getur hjálpað til við að bæta hana með því að {link}."
+    ),
+    "vi": (
+        "Trang này được dịch tự động. "
+        "Bản dịch này có thể chứa lỗi hoặc thiếu chính xác. "
+        "<br />Bạn có thể giúp cải thiện bằng cách {link}."
+    ),
+    "zu": (
+        "Leli khasi lihunyushwe ngokuzenzakalelayo. "
+        "Lolu hlelo lokuhumusha lungase luqukathe amaphutha noma ukungaqondile. "
+        "<br />Ungasiza ukuluthuthukisa ngokuthi {link}."
+    ),
+    "zh": (
+        "此页面为自动翻译。"
+        "该翻译可能包含错误或不准确之处。"
+        "<br />你可以通过{link}来帮助改进。"
+    ),
+    "ru": (
+        "Эта страница была автоматически переведена. "
+        "Этот перевод может содержать ошибки или неточности. "
+        "<br />Вы можете помочь улучшить её, {link}."
+    ),
+    "uk": (
+        "Цю сторінку перекладено автоматично. "
+        "Цей переклад може містити помилки або неточності. "
+        "<br />Ви можете допомогти покращити її, {link}."
+    ),
+    "fa": (
+        "این صفحه به صورت خودکار ترجمه شده است. "
+        "این ترجمه ممکن است حاوی خطاها یا نادقیق‌ها باشد. "
+        "<br />می‌توانید با {link} به بهبود آن کمک کنید."
+    ),
+    "gu": (
+        "આ પાનું આપમેળે અનુવાદિત થયું છે. "
+        "આ અનુવાદમાં ભૂલો અથવા અચોક્કસતાઓ હોઈ શકે છે. "
+        "<br />તમે {link} દ્વારા તેને સુધારવામાં મદદ કરી શકો છો."
+    ),
+    "ta": (
+        "இந்தப் பக்கம் தானாக மொழிபெயர்க்கப்பட்டுள்ளது. "
+        "இந்த மொழிபெயர்ப்பில் பிழைகள் அல்லது துல்லியமின்மை இருக்கலாம். "
+        "<br />நீங்கள் {link} மூலம் மேம்படுத்த உதவலாம்."
+    ),
+    "te": (
+        "ఈ పేజీ ఆటోమేటిక్‌గా అనువదించబడింది. "
+        "ఈ అనువాదంలో తప్పులు లేదా అస్పష్టతలు ఉండవచ్చు. "
+        "<br />మీరు {link} ద్వారా మెరుగుపరచడంలో సహాయం చేయవచ్చు."
+    ),
+    "mr": (
+        "हा पृष्ठ स्वयंचलितपणे अनुवादित केला आहे. "
+        "या अनुवादात चुका किंवा अचूकतेचा अभाव असू शकतो. "
+        "<br />तुम्ही {link} करून सुधारण्यात मदत करू शकता."
+    ),
+    "tr": (
+        "Bu sayfa otomatik olarak çevrildi. "
+        "Bu çeviri hatalar veya yanlışlıklar içerebilir. "
+        "<br />{link} yaparak iyileştirmeye yardımcı olabilirsiniz."
+    ),
+    "ur": (
+        "یہ صفحہ خودکار طور پر ترجمہ کیا گیا ہے۔ "
+        "اس ترجمے میں غلطیاں یا عدم درستگی ہو سکتی ہے۔ "
+        "<br />آپ {link} کے ذریعے اسے بہتر بنانے میں مدد کر سکتے ہیں۔"
+    ),
+    "bn": (
+        "এই পৃষ্ঠাটি স্বয়ংক্রিয়ভাবে অনুবাদ করা হয়েছে। "
+        "এই অনুবাদে ভুল বা অযথার্থতা থাকতে পারে। "
+        "<br />আপনি {link} এর মাধ্যমে এটি উন্নত করতে সাহায্য করতে পারেন।"
+    ),
+    "jv": (
+        "Kaca iki diterjemahake kanthi otomatis. "
+        "Terjemahan iki bisa uga ngemot kesalahan utawa ketidakakuratan. "
+        "<br />Sampeyan bisa mbantu ngapikake kanthi {link}."
+    ),
     "en": (
         "This page was automatically translated. "
         "This translation may contain errors or inaccuracies. "
@@ -116,6 +321,47 @@ def _build_disclaimer(norm_title: str, lang: str) -> str:
     link_text = {
         "sr": "urediti stranicu",
         "it": "modificando la pagina",
+        "de": "die Seite bearbeiten",
+        "es": "editando la página",
+        "fr": "modifiant la page",
+        "nl": "de pagina te bewerken",
+        "he": "עריכת הדף",
+        "da": "redigere siden",
+        "pt": "editando a página",
+        "pl": "edytując stronę",
+        "el": "επεξεργαζόμενοι τη σελίδα",
+        "hu": "szerkeszted az oldalt",
+        "sv": "redigera sidan",
+        "fi": "muokkaamalla sivua",
+        "sk": "upravovaním stránky",
+        "hr": "uređivanjem stranice",
+        "id": "mengedit halaman",
+        "ar": "تحرير الصفحة",
+        "hi": "पृष्ठ संपादित करके",
+        "no": "redigere siden",
+        "cs": "úpravou stránky",
+        "ko": "페이지를 편집",
+        "ja": "ページを編集する",
+        "ka": "გვერდის რედაქტირებით",
+        "ro": "editând pagina",
+        "sl": "urejanjem strani",
+        "lb": "d'Säit ännert",
+        "th": "แก้ไขหน้า",
+        "is": "breyta síðunni",
+        "vi": "chỉnh sửa trang",
+        "zu": "uhlele ikhasi",
+        "zh": "编辑页面",
+        "ru": "редактируя страницу",
+        "uk": "редагуючи сторінку",
+        "fa": "ویرایش صفحه",
+        "gu": "પાનું સંપાદિત કરીને",
+        "ta": "பக்கத்தைத் திருத்துவது",
+        "te": "పేజీని సవరించడం",
+        "mr": "पृष्ठ संपादित",
+        "tr": "sayfayı düzenleyerek",
+        "ur": "صفحہ میں ترمیم",
+        "bn": "পৃষ্ঠা সম্পাদনা করে",
+        "jv": "nyunting kaca",
         "en": "editing the page",
     }.get(lang, "editing the page")
     link = _translate_page_link(norm_title, lang, link_text)
@@ -178,6 +424,46 @@ def _rewrite_internal_links_to_lang_with_source(
             new_target = f"{new_target}#{anchor}"
         return f"[[{new_target}|{display}]]"
     return LINK_RE.sub(_repl, text)
+
+
+def _build_no_translate_terms(
+    entries: list[dict[str, str | bool | None]]
+) -> list[tuple[str, str]]:
+    terms: list[tuple[str, str]] = []
+    for entry in entries:
+        if not entry.get("forbidden"):
+            continue
+        term = (entry.get("term") or "").strip()
+        preferred = (entry.get("preferred") or "").strip()
+        if term and preferred:
+            terms.append((term, preferred))
+    return terms
+
+
+def _protect_terms(text: str, terms: list[tuple[str, str]]) -> tuple[str, dict[str, str]]:
+    if not terms:
+        return text, {}
+    placeholders: dict[str, str] = {}
+    for term, preferred in sorted(terms, key=lambda t: len(t[0]), reverse=True):
+        pattern = re.compile(rf"(?<!\\w){re.escape(term)}(?!\\w)", re.IGNORECASE)
+
+        def _repl(match: re.Match) -> str:
+            token = f"__NT{len(placeholders)}__"
+            placeholders[token] = preferred
+            return token
+
+        text = pattern.sub(_repl, text)
+    return text, placeholders
+
+
+def _should_translate_display(display: str, terms: list[tuple[str, str]]) -> bool:
+    if not terms:
+        return True
+    display_norm = display.strip().lower()
+    for term, _ in terms:
+        if display_norm == term.strip().lower():
+            return False
+    return True
 
 
 def _apply_termbase(text: str, entries: list[dict[str, str | bool | None]]) -> str:
@@ -403,6 +689,8 @@ def main() -> None:
 
     logging.getLogger("translate").info("termbase entries=%s", len(termbase_entries))
 
+    no_translate_terms = _build_no_translate_terms(termbase_entries)
+
     project_id = _resolve_project_id(cfg.gcp_project_id, cfg.gcp_credentials_path)
     if not project_id:
         raise SystemExit("GCP project id is required (set GCP_PROJECT_ID or ensure in credentials)")
@@ -418,9 +706,15 @@ def main() -> None:
 
     # Translate page title for DISPLAYTITLE
     engine_lang = args.engine_lang or args.lang
-    title_translation = engine.translate(
-        [norm_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
-    )[0].text
+    title_translation = None
+    for term, preferred in no_translate_terms:
+        if norm_title.strip().lower() == term.strip().lower():
+            title_translation = preferred
+            break
+    if title_translation is None:
+        title_translation = engine.translate(
+            [norm_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
+        )[0].text
     if engine_lang == "sr-Latn":
         title_translation = sr_cyrillic_to_latin(title_translation)
     if termbase_entries:
@@ -441,11 +735,14 @@ def main() -> None:
         if cfg.disclaimer_marker and cfg.disclaimer_marker in seg.text and marker_key is None:
             marker_key = seg.key
         link_text, link_placeholders, link_meta, seg_targets = _tokenize_links(seg.text, args.lang)
+        link_text, no_translate_placeholders = _protect_terms(link_text, no_translate_terms)
         source_targets.update(seg_targets)
         result = protect_wikitext(link_text, protect_links=False)
         result.placeholders.update(link_placeholders)
+        result.placeholders.update(no_translate_placeholders)
         for target, display in link_meta:
-            link_display_requests[target] = display
+            if _should_translate_display(display, no_translate_terms):
+                link_display_requests[target] = display
         protected.append((seg, result))
         source_by_key[seg.key] = seg.text
 

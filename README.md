@@ -21,6 +21,10 @@ extension. DanceResource uses this project in production; it is referenced here 
 
 Tip: for testing, set `BOT_TARGET_LANGS=sr` to limit translations to Serbian.
 
+## Dev Mode (No Rebuilds)
+Docker uses an editable install (`pip install -e .`) and mounts the repo into `/app`,
+so code changes are picked up without rebuilding the image. Rebuild only if dependencies change.
+
 ## Status
 Bootstrap phase.
 
