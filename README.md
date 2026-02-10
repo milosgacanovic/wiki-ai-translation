@@ -169,6 +169,13 @@ Force re-translate (ignore cache):
 wiki-translate-runner --run-all --no-cache
 ```
 
+## Cron (Recent Changes)
+Process recent changes once (for cron jobs):
+
+```bash
+wiki-translate-runner --poll-once
+```
+
 ## Ingestion
 Backfill all main namespace pages (wraps with `<translate>` if needed and enqueues jobs):
 

@@ -16,7 +16,8 @@ from .jobs import (
     delete_queued_jobs,
 )
 from .ingest import ingest_all, ingest_title
-from .scheduler import run_poll_loop
+from .scheduler import run_poll_loop, poll_recent_changes
+from .state import get_ingest_cursor, set_ingest_cursor
 from .translate_page import main as translate_page_main
 from .run_report import (
     start_run,
@@ -139,6 +140,7 @@ def main() -> None:
     parser.add_argument("--retry-approve", action="store_true", help="retry approvals for assembled pages")
     parser.add_argument("--no-cache", action="store_true", help="ignore cached translations and retranslate")
     parser.add_argument("--rebuild-only", action="store_true", help="use cached translations only; no MT calls")
+    parser.add_argument("--poll-once", action="store_true", help="process recentchanges once and exit")
     parser.add_argument("--poll", action="store_true", help="run recentchanges poller")
     args, _ = parser.parse_known_args()
 
@@ -280,6 +282,36 @@ def main() -> None:
             if args.rebuild_only:
                 sys.argv.append("--rebuild-only")
             translate_page_main()
+        return
+
+    if args.poll_once:
+        run_id = None
+        with get_conn(cfg.pg_dsn) as conn:
+            run_id = start_run(conn, "poll-once", cfg)
+            since = get_ingest_cursor(conn, "recentchanges")
+        changes, new_since = poll_recent_changes(client, since)
+        if changes:
+            with get_conn(cfg.pg_dsn) as conn:
+                for change in changes:
+                    try:
+                        ingest_title(cfg, client, conn, change.title, record=lambda *a, **k: None)
+                        log_item(conn, run_id, "ingest", "ok", change.title, None, None)
+                    except Exception as exc:
+                        log_item(conn, run_id, "ingest", "error", change.title, None, str(exc))
+        with get_conn(cfg.pg_dsn) as conn:
+            set_ingest_cursor(conn, "recentchanges", new_since)
+        with get_conn(cfg.pg_dsn) as conn:
+            total_jobs = count_jobs(conn, status="queued", job_type="translate_page")
+        progress = {"done": 0, "total": max(total_jobs, 1)}
+        while True:
+            with get_conn(cfg.pg_dsn) as conn:
+                if not next_jobs(conn, limit=1):
+                    break
+            process_queue(cfg, client, run_id=run_id, progress=progress, max_keys=args.max_keys)
+        with get_conn(cfg.pg_dsn) as conn:
+            finish_run(conn, run_id, "done")
+            report_path = write_report_file(conn, run_id)
+        print(str(report_path))
         return
 
     if args.poll:

@@ -8,6 +8,7 @@ from .db import get_conn, upsert_segment, upsert_translation
 from .logging import configure_logging
 from .mediawiki import MediaWikiClient, MediaWikiError
 from .translate_page import _checksum
+from .ingest import is_translation_subpage
 
 
 def _iter_unit_definitions(client: MediaWikiClient, group_id: str, lang: str) -> dict[str, str]:
@@ -68,6 +69,8 @@ def main() -> None:
         if not titles:
             break
         for title in titles:
+            if is_translation_subpage(title, langs):
+                continue
             if args.prefix and not title.startswith(args.prefix):
                 continue
             group_id = f"page-{title}"
