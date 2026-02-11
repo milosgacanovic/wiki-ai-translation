@@ -420,6 +420,23 @@ def _extract_displaytitle(text: str) -> str | None:
     return inner.strip()
 
 
+def _source_title_for_displaytitle(
+    norm_title: str, wikitext: str, segments: list[Segment]
+) -> str:
+    # Prefer source DISPLAYTITLE from unit 1, then full source wikitext.
+    for seg in segments:
+        if seg.key == "1":
+            value = _extract_displaytitle(seg.text)
+            if value:
+                return value
+            break
+    value = _extract_displaytitle(wikitext)
+    if value:
+        return value
+    # Fallback: use the leaf title, not full path.
+    return norm_title.rsplit("/", 1)[-1].strip()
+
+
 def _restore_file_links(source: str, translated: str) -> str:
     source_links = FILE_LINK_RE.findall(source)
     if not source_links:
@@ -539,9 +556,21 @@ def _protect_link_targets(text: str) -> tuple[str, dict[str, str]]:
 def _apply_termbase_safe(text: str, entries: list[dict[str, str | bool | None]]) -> str:
     if not entries:
         return text
+    # Keep disclaimer block URLs intact (e.g. Special:Translate group path).
+    disclaimer_placeholders: dict[str, str] = {}
+
+    def _mask_disclaimer(match: re.Match) -> str:
+        token = f"__DISC{len(disclaimer_placeholders)}__"
+        disclaimer_placeholders[token] = match.group(0)
+        return token
+
+    text = DISCLAIMER_TABLE_RE.sub(_mask_disclaimer, text)
     protected, placeholders = _protect_link_targets(text)
     updated = _apply_termbase(protected, entries)
-    return restore_wikitext(updated, placeholders)
+    restored = restore_wikitext(updated, placeholders)
+    for token, block in disclaimer_placeholders.items():
+        restored = restored.replace(token, block)
+    return restored
 
 
 def _normalize_leading_directives(text: str) -> str:
@@ -874,18 +903,19 @@ def main() -> None:
             glossary_id = cfg.gcp_glossaries.get(args.lang)
 
     # Translate page title for DISPLAYTITLE (only if MT is enabled)
+    source_display_title = _source_title_for_displaytitle(norm_title, wikitext, segments)
     title_translation = None
     for term, preferred in no_translate_terms:
-        if norm_title.strip().lower() == term.strip().lower():
+        if source_display_title.strip().lower() == term.strip().lower():
             title_translation = preferred
             break
     if title_translation is None:
         if engine is not None:
             title_translation = engine.translate(
-                [norm_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
+                [source_display_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
             )[0].text
         else:
-            title_translation = norm_title
+            title_translation = source_display_title
     if engine_lang == "sr-Latn":
         title_translation = sr_cyrillic_to_latin(title_translation)
     if termbase_entries:
@@ -991,6 +1021,10 @@ def main() -> None:
     inserted = False
     allow_disclaimer = False
     if marker_key and marker_key in ordered_keys:
+        allow_disclaimer = True
+    # Segment-only reruns (e.g. --max-keys 1) can rewrite key 1 and drop an
+    # existing disclaimer unless we reinsert it.
+    if "1" in ordered_keys:
         allow_disclaimer = True
     if not cfg.disclaimer_marker and "1" in ordered_keys:
         allow_disclaimer = True

@@ -6,7 +6,9 @@ from bot.translate_page import (
     _strip_unresolved_placeholders,
     _fix_broken_links,
     _restore_file_links,
+    _source_title_for_displaytitle,
 )
+from bot.segmenter import Segment
 
 
 def test_strip_empty_paragraphs():
@@ -47,3 +49,27 @@ def test_restore_file_links():
     source = "[[File:Arjan bouw.jpg|alt=Arjan Bouw|thumb|Photo: Luna Burger]]"
     translated = "[[File:Arjan Bouw.jpg|alt=Arjan Bou|slika|Fotografija: Luna Burger]]"
     assert _restore_file_links(source, translated) == source
+
+
+def test_source_title_for_displaytitle_prefers_segment_1():
+    segments = [Segment(key="1", text="{{DISPLAYTITLE:InnerMotion - The Guidebook - Acknowledgment}}")]
+    assert (
+        _source_title_for_displaytitle(
+            "Conscious Dance Practices/InnerMotion/The Guidebook/Acknowledgment",
+            "",
+            segments,
+        )
+        == "InnerMotion - The Guidebook - Acknowledgment"
+    )
+
+
+def test_source_title_for_displaytitle_falls_back_to_leaf_title():
+    segments = [Segment(key="2", text="Body only")]
+    assert (
+        _source_title_for_displaytitle(
+            "Conscious Dance Practices/InnerMotion/The Guidebook/Acknowledgment",
+            "No display title in source",
+            segments,
+        )
+        == "Acknowledgment"
+    )
