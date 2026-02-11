@@ -437,6 +437,44 @@ def _source_title_for_displaytitle(
     return norm_title.rsplit("/", 1)[-1].strip()
 
 
+def _page_display_title_unit_titles(norm_title: str, lang: str) -> list[str]:
+    page_title_variants = [norm_title]
+    underscored = norm_title.replace(" ", "_")
+    if underscored != norm_title:
+        page_title_variants.append(underscored)
+    unit_key_variants = ["Page display title", "Page_display_title"]
+    out: list[str] = []
+    for page_variant in page_title_variants:
+        for unit_key in unit_key_variants:
+            out.append(f"Translations:{page_variant}/{unit_key}/{lang}")
+    # Keep order but de-duplicate.
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for title in out:
+        if title in seen:
+            continue
+        seen.add(title)
+        ordered.append(title)
+    return ordered
+
+
+def _upsert_page_display_title_unit(
+    client: MediaWikiClient, norm_title: str, lang: str, displaytitle_value: str
+) -> str:
+    candidates = _page_display_title_unit_titles(norm_title, lang)
+    chosen = candidates[0]
+    for candidate in candidates:
+        try:
+            client.get_page_revision_id(candidate)
+            chosen = candidate
+            break
+        except Exception:
+            continue
+    summary = "Machine translation by bot (page display title)"
+    client.edit(chosen, displaytitle_value, summary, bot=True)
+    return chosen
+
+
 def _restore_file_links(source: str, translated: str) -> str:
     source_links = FILE_LINK_RE.findall(source)
     if not source_links:
@@ -1083,6 +1121,21 @@ def main() -> None:
         if displaytitle_value is None and not args.rebuild_only:
             displaytitle_value = title_translation
         if displaytitle_value:
+            if not args.dry_run:
+                try:
+                    unit_title = _upsert_page_display_title_unit(
+                        client, norm_title, args.lang, displaytitle_value
+                    )
+                    logging.getLogger("translate").info(
+                        "edited %s", unit_title
+                    )
+                except Exception as exc:
+                    logging.getLogger("translate").warning(
+                        "failed to upsert page display title unit for %s/%s: %s",
+                        norm_title,
+                        args.lang,
+                        exc,
+                    )
             displaytitle = f"{{{{DISPLAYTITLE:{displaytitle_value}}}}}"
             translated_by_key["1"] = f"{displaytitle}\n{translated_by_key['1']}"
         translated_by_key["1"] = _strip_empty_paragraphs(translated_by_key["1"])
