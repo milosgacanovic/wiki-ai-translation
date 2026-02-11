@@ -61,6 +61,7 @@ You are Codex, implementing a server-side translation bot for https://wiki.dance
 - `/migrations` (db schema)
 - `/docker` (Dockerfile, compose)
 - `/docs` (operator notes)
+- `/docs/generated` (generated local artifacts/reports; gitignored)
 
 ## Output Expectations
 - Produce small, runnable increments.
@@ -68,3 +69,4 @@ You are Codex, implementing a server-side translation bot for https://wiki.dance
 - Prefer boring reliability over cleverness.
 - If uncertain about a MediaWiki/Translate API detail, implement a probe script and log the exact responses.
 - When updating interface namespace messages (e.g., `MediaWiki:Sidebar/{lang}`), use the MediaWiki API and ensure the bot has `editinterface` or equivalent rights.
+- Put ad-hoc/generated scan outputs in `docs/generated/` (not in root `docs/`).

@@ -14,6 +14,7 @@ extension. DanceResource uses this project in production; it is referenced here 
 - `migrations/` DB schema
 - `docker/` Dockerfile and compose
 - `docs/` operator notes
+- `docs/generated/` local/generated scan outputs and ad-hoc reports (gitignored)
 
 ## Quickstart (local)
 1. Create `.env` from `.env.example` and set MediaWiki + MT credentials.
@@ -141,6 +142,7 @@ wiki-translate-runner --run-all
 ```
 
 Reports are written to `docs/runs/`.
+Generated one-off analysis outputs should go to `docs/generated/`.
 
 Print last run summary (JSON):
 
