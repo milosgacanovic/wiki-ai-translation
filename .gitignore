@@ -2,4 +2,14 @@
 .secrets/
 __pycache__/
 *.pyc
+*.swp
+docker-compose.override.yml
 docs/runs/
+docs/delete-redirect-cleanup-report.json
+docs/displaytitle-english-suspects.json
+docs/displaytitle-english-suspects.txt
+docs/displaytitle-equals-source-displaytitle.tsv
+docs/displaytitle-suspects.tsv
+docs/pages-containing-redirect-token-absolute-urls.txt
+docs/redirect-pages-absolute-urls.txt
+docs/wrapped-redirect-pages-absolute-urls.txt
