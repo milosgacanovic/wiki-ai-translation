@@ -207,6 +207,12 @@ Force re-translate (ignore cache):
 wiki-translate-runner --run-all --no-cache
 ```
 
+Repair translated `DISPLAYTITLE` values when they were overwritten with source titles:
+
+```bash
+python -m bot.repair_display_titles --sleep-ms 200
+```
+
 ## Cron (Recent Changes)
 Process recent changes once (for cron jobs):
 

@@ -921,13 +921,10 @@ def main() -> None:
         if source_display_title.strip().lower() == term.strip().lower():
             title_translation = preferred
             break
-    if title_translation is None:
-        if engine is not None:
-            title_translation = engine.translate(
-                [source_display_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
-            )[0].text
-        else:
-            title_translation = source_display_title
+    if title_translation is None and engine is not None:
+        title_translation = engine.translate(
+            [source_display_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
+        )[0].text
     if engine_lang == "sr-Latn":
         title_translation = sr_cyrillic_to_latin(title_translation)
     if termbase_entries:

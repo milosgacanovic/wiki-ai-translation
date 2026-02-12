@@ -136,6 +136,19 @@ BOT_GCP_GLOSSARIES={"sr":"dr-sr-glossary"}
 
 Re-run the translation to apply glossary enforcement.
 
+## Display Title Repair
+If translated page titles were accidentally reset to source-language titles, repair them:
+
+```bash
+python -m bot.repair_display_titles --sleep-ms 200
+```
+
+Dry run:
+
+```bash
+python -m bot.repair_display_titles --dry-run
+```
+
 ## Safety
 - Edits are marked as bot edits; no visible disclaimer paragraph is injected into translated content.
 - QA failures block publishing.
