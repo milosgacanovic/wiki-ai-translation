@@ -23,6 +23,9 @@ wiki-translate-bot = "bot.app:main"
 wiki-translate-runner = "bot.runner:main"
 wiki-translate-glossary-sync = "bot.glossary_sync:main"
 wiki-translate-cache-backfill = "bot.cache_backfill:main"
+wiki-translate-status-migrate = "bot.migrate_translation_status:main"
+wiki-translate-status-ui = "bot.update_translation_status_ui:main"
+wiki-translate-status-sync-reviewed = "bot.sync_translation_status:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

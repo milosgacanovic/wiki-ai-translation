@@ -31,7 +31,7 @@ def start_run(conn, mode: str, cfg: Config) -> int:
             VALUES (%s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (mode, target_langs, skip_prefixes, cfg.disclaimer_marker, "running"),
+            (mode, target_langs, skip_prefixes, None, "running"),
         )
         run_id = cur.fetchone()[0]
     return int(run_id)

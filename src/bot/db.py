@@ -107,6 +107,29 @@ def fetch_cached_translation(
     return row[0]
 
 
+def fetch_cached_translation_by_checksum(
+    conn: psycopg.Connection, checksum: str, lang: str
+) -> str | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT t.text
+            FROM segments s
+            JOIN translations t
+              ON t.segment_key = (s.page_title || '::' || s.segment_key)
+            WHERE s.checksum = %s
+              AND t.lang = %s
+            ORDER BY t.created_at DESC
+            LIMIT 1
+            """,
+            (checksum, lang),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return row[0]
+
+
 def upsert_translation(
     conn: psycopg.Connection,
     segment_key: str,

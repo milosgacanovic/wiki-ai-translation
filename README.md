@@ -150,8 +150,38 @@ Print last run summary (JSON):
 wiki-translate-runner --report-last
 ```
 
+Install/update translation status template + JS banner:
+
+```bash
+wiki-translate-status-ui
+```
+
+Migrate existing translated pages to `{{Translation_status}}`:
+
+```bash
+wiki-translate-status-migrate
+```
+
+Sync reviewed-page metadata (`source_rev_at_translation`) to current source revision:
+
+```bash
+wiki-translate-status-sync-reviewed
+```
+
+With approval update:
+
+```bash
+wiki-translate-status-sync-reviewed --approve
+```
+
 ## Translation Cache
 The bot caches translations in Postgres (`segments` + `translations`) to avoid repeat MT costs.
+
+Cache lookup strategy:
+- L1: exact page-unit key (`page_title::segment_key`) when source checksum for that unit is unchanged.
+- L2: content checksum fallback (cross-page). If unit keys changed (for example after re-marking),
+  the bot reuses any existing translation with the same source checksum + target language.
+- Use `--no-cache` to force MT when glossary/style changes require fresh translations.
 
 Backfill the cache from existing Translate units (no MT calls):
 
@@ -177,6 +207,38 @@ Process recent changes once (for cron jobs):
 ```bash
 wiki-translate-runner --poll-once
 ```
+
+Delta dry-run preview (no queue/process/cursor changes):
+
+```bash
+wiki-translate-runner --poll-once --dry-run
+```
+
+Compatibility alias:
+
+```bash
+wiki-translate-runner --poll-once --plan
+```
+
+Clear queued translation jobs (manual maintenance):
+
+```bash
+wiki-translate-runner --clear-queue
+```
+
+Clear queue, then run one poll cycle:
+
+```bash
+wiki-translate-runner --clear-queue --poll-once
+```
+
+Default production flow (recommended):
+- Use `wiki-translate-runner --poll-once` from cron every few minutes.
+- The runner detects source page changes, refreshes translation units via mark-for-translation API,
+  and enqueues translation jobs automatically.
+- Translation then runs in delta mode by default (cache enabled): unchanged segments are reused from
+  cache, changed segments are sent to MT.
+- Avoid direct `translate_page` calls for normal automation; use them only for manual/forced runs.
 
 ## Ingestion
 Backfill all main namespace pages (wraps with `<translate>` if needed and enqueues jobs):
@@ -214,24 +276,28 @@ BOT_TRANSLATE_MARK_PARAMS={"title":"{title}","translatetitle":"yes"}
 ```
 If the API module is unavailable, leave these empty and mark pages manually or enable it server-side.
 
-## Disclaimer Placement (Optional)
-By default the disclaimer is inserted at the top of the translated page (first segment).
-You can move it to a specific location by providing an anchor string per page + language:
+## Translation Status System
+The bot uses `{{Translation_status}}` metadata in translated pages instead of inserting visible disclaimer text into article content.
 
-```bash
-BOT_DISCLAIMER_ANCHORS={"Welcome_to_the_DanceResource_Wiki":{"sr":"To learn what we stand for, read our Core Values, and explore the vision that moves us in the Manifesto."}}
-```
+Supported status values:
+- `machine`: bot can update translation when source changes.
+- `reviewed`: bot must not overwrite translation content.
+- `outdated`: previously reviewed, source changed; bot must not overwrite translation content.
 
-If the anchor string is found in the translated segment, the disclaimer is inserted immediately after it.
-If not found, the disclaimer falls back to the top.
+Locking rule:
+- If status is `reviewed` or `outdated`, translation runs (including `--rebuild-only`) skip content updates.
+- If status is `reviewed` and source revision changed, bot marks status to `outdated` (metadata-only change).
 
-Alternatively, you can place an invisible marker in the source wikitext (recommended for editors):
+Reviewed workflow note:
+- When a human marks a page as `status=reviewed`, run `wiki-translate-status-sync-reviewed` so
+  `source_rev_at_translation` is aligned with the current source revision for reliable outdated detection.
 
-```bash
-BOT_DISCLAIMER_MARKER=<!--BOT_DISCLAIMER-->
-```
+The bot writes the status template into segment `1` and updates source revision metadata.
 
-Place `<!--BOT_DISCLAIMER-->` in the source where the disclaimer should appear.
+Metadata formatting rule (segment `1`):
+- Keep leading metadata directives contiguous with no blank/new lines before first content token.
+- Example: `{{Translation_status...}}{{DISPLAYTITLE:...}}__NOTOC__<div ...>`
+- This avoids parser-inserted leading `<p><br></p>` artifacts.
 
 ## Skip Prefixes (Optional)
 Skip translation for specific subtrees by title prefix:

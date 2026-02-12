@@ -17,6 +17,7 @@ from .jobs import (
 )
 from .ingest import ingest_all, ingest_title
 from .scheduler import run_poll_loop, poll_recent_changes
+from .sync_translation_status import main as sync_translation_status_main
 from .state import get_ingest_cursor, set_ingest_cursor
 from .translate_page import main as translate_page_main
 from .run_report import (
@@ -87,9 +88,19 @@ def process_queue(
                         sys.argv.append("--no-cache")
                     if rebuild_only:
                         sys.argv.append("--rebuild-only")
-                    translate_page_main()
+                    result = translate_page_main()
                     if run_id is not None:
-                        log_item(conn, run_id, "translate", "ok", job.page_title, job.lang, None)
+                        status = "ok"
+                        message = None
+                        if isinstance(result, dict):
+                            run_status = str(result.get("status", "")).strip().lower()
+                            if run_status.startswith("locked_"):
+                                status = "skip"
+                                message = run_status
+                            elif run_status == "outdated":
+                                status = "warning"
+                                message = "status changed to outdated"
+                        log_item(conn, run_id, "translate", status, job.page_title, job.lang, message)
                 mark_job_done(conn, job.id)
             except Exception as exc:
                 mark_job_error(conn, job.id, str(exc))
@@ -137,13 +148,32 @@ def main() -> None:
     parser.add_argument("--force-retranslate", action="store_true", help="enqueue translations even if source unchanged")
     parser.add_argument("--max-keys", type=int, default=None, help="translate only first N segments per page")
     parser.add_argument("--run-all", action="store_true", help="ingest all then process queue")
-    parser.add_argument("--plan", action="store_true", help="dry-run: show how many translations would be queued")
+    parser.add_argument(
+        "--plan",
+        action="store_true",
+        help="deprecated alias for --dry-run (works with --poll-once)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="preview delta queue from recentchanges; no queue/process/cursor updates",
+    )
     parser.add_argument("--report-last", action="store_true", help="print last run summary as JSON")
     parser.add_argument("--retry-approve", action="store_true", help="retry approvals for assembled pages")
+    parser.add_argument(
+        "--clear-queue",
+        action="store_true",
+        help="clear queued translate jobs before running",
+    )
     parser.add_argument("--no-cache", action="store_true", help="ignore cached translations and retranslate")
     parser.add_argument("--rebuild-only", action="store_true", help="use cached translations only; no MT calls")
     parser.add_argument("--poll-once", action="store_true", help="process recentchanges once and exit")
     parser.add_argument("--poll", action="store_true", help="run recentchanges poller")
+    parser.add_argument(
+        "--sync-reviewed-status",
+        action="store_true",
+        help="sync source_rev_at_translation for reviewed pages",
+    )
     args, _ = parser.parse_known_args()
 
     configure_logging()
@@ -171,31 +201,30 @@ def main() -> None:
         return
 
     if args.plan:
-        plan_pages: set[str] = set()
-        with get_conn(cfg.pg_dsn) as conn:
-            def _record(kind: str, status: str, page_title: str, lang: str | None, message: str) -> None:
-                if kind == "plan" and status == "queue":
-                    plan_pages.add(page_title)
-
-            ingest_all(
-                cfg,
-                client,
-                conn,
-                sleep_ms=args.ingest_sleep_ms,
-                limit=args.ingest_limit,
-                force=args.force_retranslate,
-                record=_record,
-                dry_run=True,
-            )
-        print(f"would_queue_pages={len(plan_pages)}")
-        return
+        args.dry_run = True
 
     if args.no_cache and args.rebuild_only:
         raise SystemExit("--no-cache cannot be used with --rebuild-only")
+    if args.dry_run and not args.poll_once:
+        raise SystemExit("--dry-run is currently supported with --poll-once")
+    if args.clear_queue and args.dry_run:
+        raise SystemExit("--clear-queue cannot be combined with --dry-run")
+
+    if args.clear_queue:
+        with get_conn(cfg.pg_dsn) as conn:
+            deleted = delete_queued_jobs(conn, job_type="translate_page")
+        print(f"cleared_queued_translate_jobs={deleted}")
 
     if args.report_last:
         with get_conn(cfg.pg_dsn) as conn:
             print(report_last_run(conn))
+        return
+
+    if args.sync_reviewed_status:
+        import sys
+
+        sys.argv = ["sync_translation_status"]
+        sync_translation_status_main()
         return
 
     if args.retry_approve and not args.run_all:
@@ -287,6 +316,38 @@ def main() -> None:
         return
 
     if args.poll_once:
+        if args.dry_run:
+            with get_conn(cfg.pg_dsn) as conn:
+                since = get_ingest_cursor(conn, "recentchanges")
+            changes, _new_since = poll_recent_changes(client, since)
+            plan_pages: set[str] = set()
+            with get_conn(cfg.pg_dsn) as conn:
+                def _record(
+                    kind: str,
+                    status: str,
+                    page_title: str,
+                    lang: str | None,
+                    message: str,
+                ) -> None:
+                    if kind == "plan" and status == "queue":
+                        plan_pages.add(page_title)
+
+                for change in changes:
+                    ingest_title(
+                        cfg,
+                        client,
+                        conn,
+                        change.title,
+                        record=_record,
+                        force=args.force_retranslate,
+                        dry_run=True,
+                    )
+            print(f"would_process_changes={len(changes)}")
+            print(f"would_queue_pages={len(plan_pages)}")
+            for title in sorted(plan_pages):
+                print(title)
+            return
+
         run_id = None
         with get_conn(cfg.pg_dsn) as conn:
             run_id = start_run(conn, "poll-once", cfg)

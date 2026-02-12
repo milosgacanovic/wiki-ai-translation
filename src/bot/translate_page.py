@@ -13,6 +13,7 @@ from .db import (
     fetch_termbase,
     fetch_segment_checksums,
     fetch_cached_translation,
+    fetch_cached_translation_by_checksum,
     upsert_segment,
     upsert_translation,
 )
@@ -50,6 +51,14 @@ BROKEN_LINK_RE = re.compile(r"\[\[(?:__PH\d+__|__LINK\d+__)\|([^\]]+)\]\]")
 DISPLAYTITLE_RE = re.compile(r"\{\{\s*DISPLAYTITLE\s*:[^}]+\}\}", re.IGNORECASE)
 DISCLAIMER_TABLE_RE = re.compile(
     r"\{\|\s*class=\"translation-disclaimer\".*?\|\}", re.DOTALL
+)
+TRANSLATION_STATUS_TEMPLATE_RE = re.compile(
+    r"\{\{\s*Translation_status\b[^{}]*\}\}\s*",
+    re.IGNORECASE,
+)
+LEADING_META_TOKEN_RE = re.compile(
+    r"(?:\{\{[^{}\n]+\}\}|__[A-Z0-9_]+__|\[\[(?:File|Image):[^\]]+\]\]|<!--.*?-->)",
+    re.IGNORECASE,
 )
 
 
@@ -92,297 +101,6 @@ def _tokenize_links(
     return LINK_RE.sub(_replace, text), placeholders, link_meta, source_targets
 
 
-
-
-DISCALIMER_TEXT_BY_LANG = {
-    "sr": (
-        "Ova stranica je automatski prevedena. "
-        "Ovaj prevod može sadržati greške ili netačnosti. "
-        "<br />Možete pomoći da se poboljša tako što ćete {link}."
-    ),
-    "it": (
-        "Questa pagina è stata tradotta automaticamente. "
-        "Questa traduzione può contenere errori o imprecisioni. "
-        "<br />Puoi aiutare a migliorarla {link}."
-    ),
-    "de": (
-        "Diese Seite wurde automatisch übersetzt. "
-        "Diese Übersetzung kann Fehler oder Ungenauigkeiten enthalten. "
-        "<br />Sie können helfen, sie zu verbessern, indem Sie {link}."
-    ),
-    "es": (
-        "Esta página fue traducida automáticamente. "
-        "Esta traducción puede contener errores o inexactitudes. "
-        "<br />Puedes ayudar a mejorarla {link}."
-    ),
-    "fr": (
-        "Cette page a été traduite automatiquement. "
-        "Cette traduction peut contenir des erreurs ou des imprécisions. "
-        "<br />Vous pouvez aider à l'améliorer en {link}."
-    ),
-    "nl": (
-        "Deze pagina is automatisch vertaald. "
-        "Deze vertaling kan fouten of onnauwkeurigheden bevatten. "
-        "<br />Je kunt helpen om het te verbeteren door {link}."
-    ),
-    "he": (
-        "דף זה תורגם אוטומטית. "
-        "תרגום זה עשוי להכיל שגיאות או אי־דיוקים. "
-        "<br />אפשר לעזור לשפר אותו על ידי {link}."
-    ),
-    "da": (
-        "Denne side blev oversat automatisk. "
-        "Denne oversættelse kan indeholde fejl eller unøjagtigheder. "
-        "<br />Du kan hjælpe med at forbedre den ved at {link}."
-    ),
-    "pt": (
-        "Esta página foi traduzida automaticamente. "
-        "Esta tradução pode conter erros ou imprecisões. "
-        "<br />Você pode ajudar a melhorá-la {link}."
-    ),
-    "pl": (
-        "Ta strona została przetłumaczona automatycznie. "
-        "To tłumaczenie może zawierać błędy lub nieścisłości. "
-        "<br />Możesz pomóc ją poprawić, {link}."
-    ),
-    "el": (
-        "Αυτή η σελίδα μεταφράστηκε αυτόματα. "
-        "Αυτή η μετάφραση μπορεί να περιέχει λάθη ή ανακρίβειες. "
-        "<br />Μπορείτε να βοηθήσετε να βελτιωθεί {link}."
-    ),
-    "hu": (
-        "Ezt az oldalt automatikusan lefordítottuk. "
-        "Ez a fordítás hibákat vagy pontatlanságokat tartalmazhat. "
-        "<br />Segíthet javítani rajta, ha {link}."
-    ),
-    "sv": (
-        "Den här sidan översattes automatiskt. "
-        "Den här översättningen kan innehålla fel eller felaktigheter. "
-        "<br />Du kan hjälpa till att förbättra den genom att {link}."
-    ),
-    "fi": (
-        "Tämä sivu on käännetty automaattisesti. "
-        "Tämä käännös voi sisältää virheitä tai epätarkkuuksia. "
-        "<br />Voit auttaa parantamaan sitä {link}."
-    ),
-    "sk": (
-        "Táto stránka bola automaticky preložená. "
-        "Tento preklad môže obsahovať chyby alebo nepresnosti. "
-        "<br />Môžete pomôcť zlepšiť ho {link}."
-    ),
-    "hr": (
-        "Ova stranica je automatski prevedena. "
-        "Ovaj prijevod može sadržavati pogreške ili netočnosti. "
-        "<br />Možete pomoći da se poboljša {link}."
-    ),
-    "id": (
-        "Halaman ini diterjemahkan secara otomatis. "
-        "Terjemahan ini mungkin mengandung kesalahan atau ketidakakuratan. "
-        "<br />Anda dapat membantu memperbaikinya dengan {link}."
-    ),
-    "ar": (
-        "تمت ترجمة هذه الصفحة تلقائياً. "
-        "قد تحتوي هذه الترجمة على أخطاء أو عدم دقة. "
-        "<br />يمكنك المساعدة في تحسينها عبر {link}."
-    ),
-    "hi": (
-        "यह पृष्ठ स्वचालित रूप से अनुवादित किया गया है। "
-        "इस अनुवाद में त्रुटियाँ या अशुद्धियाँ हो सकती हैं। "
-        "<br />आप इसे बेहतर बनाने में मदद कर सकते हैं, {link}."
-    ),
-    "no": (
-        "Denne siden ble automatisk oversatt. "
-        "Denne oversettelsen kan inneholde feil eller unøyaktigheter. "
-        "<br />Du kan hjelpe til med å forbedre den ved å {link}."
-    ),
-    "cs": (
-        "Tato stránka byla automaticky přeložena. "
-        "Tento překlad může obsahovat chyby nebo nepřesnosti. "
-        "<br />Můžete pomoci ji zlepšit {link}."
-    ),
-    "ko": (
-        "이 페이지는 자동 번역되었습니다. "
-        "이 번역에는 오류나 부정확한 내용이 있을 수 있습니다. "
-        "<br />{link}을 통해 개선하는 데 도움을 줄 수 있습니다."
-    ),
-    "ja": (
-        "このページは自動翻訳されました。"
-        "この翻訳には誤りや不正確さが含まれる場合があります。"
-        "<br />{link}ことで改善に協力できます。"
-    ),
-    "ka": (
-        "ეს გვერდი ავტომატურად იქნა თარგმნილი. "
-        "ამ თარგმანს შეიძლება ჰქონდეს შეცდომები ან უზუსტობები. "
-        "<br />შეგიძლიათ დაგვეხმაროთ გაუმჯობესებაში {link}."
-    ),
-    "ro": (
-        "Această pagină a fost tradusă automat. "
-        "Această traducere poate conține erori sau inexactități. "
-        "<br />Poți ajuta la îmbunătățire {link}."
-    ),
-    "sl": (
-        "Ta stran je bila samodejno prevedena. "
-        "Ta prevod lahko vsebuje napake ali netočnosti. "
-        "<br />Pomagate lahko pri izboljšavi z {link}."
-    ),
-    "lb": (
-        "Dës Säit gouf automatesch iwwersat. "
-        "Dës Iwwersetzung kann Feeler oder Ongenauegkeeten enthalen. "
-        "<br />Dir kënnt hëllefen se ze verbesseren andeems Dir {link}."
-    ),
-    "th": (
-        "หน้านี้ถูกแปลโดยอัตโนมัติ "
-        "การแปลนี้อาจมีข้อผิดพลาดหรือความไม่ถูกต้อง "
-        "<br />คุณสามารถช่วยปรับปรุงได้โดย {link}."
-    ),
-    "is": (
-        "Þessi síða var sjálfvirkt þýdd. "
-        "Þessi þýðing kann innihaldið villur eða ónákvæmni. "
-        "<br />Þú getur hjálpað til við að bæta hana með því að {link}."
-    ),
-    "vi": (
-        "Trang này được dịch tự động. "
-        "Bản dịch này có thể chứa lỗi hoặc thiếu chính xác. "
-        "<br />Bạn có thể giúp cải thiện bằng cách {link}."
-    ),
-    "zu": (
-        "Leli khasi lihunyushwe ngokuzenzakalelayo. "
-        "Lolu hlelo lokuhumusha lungase luqukathe amaphutha noma ukungaqondile. "
-        "<br />Ungasiza ukuluthuthukisa ngokuthi {link}."
-    ),
-    "zh": (
-        "此页面为自动翻译。"
-        "该翻译可能包含错误或不准确之处。"
-        "<br />你可以通过{link}来帮助改进。"
-    ),
-    "ru": (
-        "Эта страница была автоматически переведена. "
-        "Этот перевод может содержать ошибки или неточности. "
-        "<br />Вы можете помочь улучшить её, {link}."
-    ),
-    "uk": (
-        "Цю сторінку перекладено автоматично. "
-        "Цей переклад може містити помилки або неточності. "
-        "<br />Ви можете допомогти покращити її, {link}."
-    ),
-    "fa": (
-        "این صفحه به صورت خودکار ترجمه شده است. "
-        "این ترجمه ممکن است حاوی خطاها یا نادقیق‌ها باشد. "
-        "<br />می‌توانید با {link} به بهبود آن کمک کنید."
-    ),
-    "gu": (
-        "આ પાનું આપમેળે અનુવાદિત થયું છે. "
-        "આ અનુવાદમાં ભૂલો અથવા અચોક્કસતાઓ હોઈ શકે છે. "
-        "<br />તમે {link} દ્વારા તેને સુધારવામાં મદદ કરી શકો છો."
-    ),
-    "ta": (
-        "இந்தப் பக்கம் தானாக மொழிபெயர்க்கப்பட்டுள்ளது. "
-        "இந்த மொழிபெயர்ப்பில் பிழைகள் அல்லது துல்லியமின்மை இருக்கலாம். "
-        "<br />நீங்கள் {link} மூலம் மேம்படுத்த உதவலாம்."
-    ),
-    "te": (
-        "ఈ పేజీ ఆటోమేటిక్‌గా అనువదించబడింది. "
-        "ఈ అనువాదంలో తప్పులు లేదా అస్పష్టతలు ఉండవచ్చు. "
-        "<br />మీరు {link} ద్వారా మెరుగుపరచడంలో సహాయం చేయవచ్చు."
-    ),
-    "mr": (
-        "हा पृष्ठ स्वयंचलितपणे अनुवादित केला आहे. "
-        "या अनुवादात चुका किंवा अचूकतेचा अभाव असू शकतो. "
-        "<br />तुम्ही {link} करून सुधारण्यात मदत करू शकता."
-    ),
-    "tr": (
-        "Bu sayfa otomatik olarak çevrildi. "
-        "Bu çeviri hatalar veya yanlışlıklar içerebilir. "
-        "<br />{link} yaparak iyileştirmeye yardımcı olabilirsiniz."
-    ),
-    "ur": (
-        "یہ صفحہ خودکار طور پر ترجمہ کیا گیا ہے۔ "
-        "اس ترجمے میں غلطیاں یا عدم درستگی ہو سکتی ہے۔ "
-        "<br />آپ {link} کے ذریعے اسے بہتر بنانے میں مدد کر سکتے ہیں۔"
-    ),
-    "bn": (
-        "এই পৃষ্ঠাটি স্বয়ংক্রিয়ভাবে অনুবাদ করা হয়েছে। "
-        "এই অনুবাদে ভুল বা অযথার্থতা থাকতে পারে। "
-        "<br />আপনি {link} এর মাধ্যমে এটি উন্নত করতে সাহায্য করতে পারেন।"
-    ),
-    "jv": (
-        "Kaca iki diterjemahake kanthi otomatis. "
-        "Terjemahan iki bisa uga ngemot kesalahan utawa ketidakakuratan. "
-        "<br />Sampeyan bisa mbantu ngapikake kanthi {link}."
-    ),
-    "en": (
-        "This page was automatically translated. "
-        "This translation may contain errors or inaccuracies. "
-        "<br />You can help improve it by {link}."
-    ),
-}
-
-
-def _translate_page_link(norm_title: str, lang: str, link_text: str) -> str:
-    group = f"page-{norm_title.replace(' ', '+')}"
-    href = (
-        "https://wiki.danceresource.org/index.php?"
-        f"title=Special:Translate&group={group}&action=page&filter=&language={lang}"
-    )
-    return f"[{href} {link_text}]"
-
-
-def _build_disclaimer(norm_title: str, lang: str) -> str:
-    text = DISCALIMER_TEXT_BY_LANG.get(lang, DISCALIMER_TEXT_BY_LANG["en"])
-    link_text = {
-        "sr": "urediti stranicu",
-        "it": "modificando la pagina",
-        "de": "die Seite bearbeiten",
-        "es": "editando la página",
-        "fr": "modifiant la page",
-        "nl": "de pagina te bewerken",
-        "he": "עריכת הדף",
-        "da": "redigere siden",
-        "pt": "editando a página",
-        "pl": "edytując stronę",
-        "el": "επεξεργαζόμενοι τη σελίδα",
-        "hu": "szerkeszted az oldalt",
-        "sv": "redigera sidan",
-        "fi": "muokkaamalla sivua",
-        "sk": "upravovaním stránky",
-        "hr": "uređivanjem stranice",
-        "id": "mengedit halaman",
-        "ar": "تحرير الصفحة",
-        "hi": "पृष्ठ संपादित करके",
-        "no": "redigere siden",
-        "cs": "úpravou stránky",
-        "ko": "페이지를 편집",
-        "ja": "ページを編集する",
-        "ka": "გვერდის რედაქტირებით",
-        "ro": "editând pagina",
-        "sl": "urejanjem strani",
-        "lb": "d'Säit ännert",
-        "th": "แก้ไขหน้า",
-        "is": "breyta síðunni",
-        "vi": "chỉnh sửa trang",
-        "zu": "uhlele ikhasi",
-        "zh": "编辑页面",
-        "ru": "редактируя страницу",
-        "uk": "редагуючи сторінку",
-        "fa": "ویرایش صفحه",
-        "gu": "પાનું સંપાદિત કરીને",
-        "ta": "பக்கத்தைத் திருத்துவது",
-        "te": "పేజీని సవరించడం",
-        "mr": "पृष्ठ संपादित",
-        "tr": "sayfayı düzenleyerek",
-        "ur": "صفحہ میں ترمیم",
-        "bn": "পৃষ্ঠা সম্পাদনা করে",
-        "jv": "nyunting kaca",
-        "en": "editing the page",
-    }.get(lang, "editing the page")
-    link = _translate_page_link(norm_title, lang, link_text)
-    body = text.format(link=link)
-    return (
-        "{| class=\"translation-disclaimer\"\n"
-        "|-\n"
-        f"| {body}\n"
-        "|}"
-    )
 
 
 def _strip_empty_paragraphs(text: str) -> str:
@@ -463,16 +181,112 @@ def _upsert_page_display_title_unit(
 ) -> str:
     candidates = _page_display_title_unit_titles(norm_title, lang)
     chosen = candidates[0]
+    existing_text: str | None = None
     for candidate in candidates:
         try:
-            client.get_page_revision_id(candidate)
+            text, _, _ = client.get_page_wikitext(candidate)
             chosen = candidate
+            existing_text = text
             break
         except Exception:
             continue
-    summary = "Machine translation by bot (page display title)"
+    if existing_text is not None and existing_text.strip() == displaytitle_value.strip():
+        return chosen
+    summary = "Machine translation by bot"
     client.edit(chosen, displaytitle_value, summary, bot=True)
     return chosen
+
+
+def _remove_disclaimer_tables(text: str) -> str:
+    return DISCLAIMER_TABLE_RE.sub("", text).strip()
+
+
+def _parse_status_template(text: str) -> dict[str, str]:
+    match = TRANSLATION_STATUS_TEMPLATE_RE.search(text)
+    if not match:
+        return {}
+    raw = match.group(0).strip().lstrip("{").rstrip("}")
+    parts = raw.split("|")[1:]
+    params: dict[str, str] = {}
+    for part in parts:
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        params[key.strip()] = value.strip()
+    return params
+
+
+def _build_status_template(
+    status: str,
+    source_rev_at_translation: str | None = None,
+    reviewed_at: str | None = None,
+    reviewed_by: str | None = None,
+    outdated_source_rev: str | None = None,
+) -> str:
+    parts = [f"status={status}"]
+    if source_rev_at_translation:
+        parts.append(f"source_rev_at_translation={source_rev_at_translation}")
+    if reviewed_at:
+        parts.append(f"reviewed_at={reviewed_at}")
+    if reviewed_by:
+        parts.append(f"reviewed_by={reviewed_by}")
+    if outdated_source_rev:
+        parts.append(f"outdated_source_rev={outdated_source_rev}")
+    return "{{Translation_status|" + "|".join(parts) + "}}"
+
+
+def _upsert_status_template(
+    text: str,
+    status: str,
+    source_rev_at_translation: str | None = None,
+    reviewed_at: str | None = None,
+    reviewed_by: str | None = None,
+    outdated_source_rev: str | None = None,
+) -> str:
+    base = TRANSLATION_STATUS_TEMPLATE_RE.sub("", text).lstrip()
+    tpl = _build_status_template(
+        status=status,
+        source_rev_at_translation=source_rev_at_translation,
+        reviewed_at=reviewed_at,
+        reviewed_by=reviewed_by,
+        outdated_source_rev=outdated_source_rev,
+    )
+    if base.startswith("{{DISPLAYTITLE:"):
+        return f"{tpl}{base}".strip()
+    return f"{tpl}\n{base}".strip()
+
+
+def _translation_status_from_props(props: dict[str, object]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key in (
+        "dr_translation_status",
+        "dr_source_rev_at_translation",
+        "dr_reviewed_at",
+        "dr_reviewed_by",
+        "dr_outdated_source_rev",
+    ):
+        value = props.get(key)
+        if value is None:
+            continue
+        out[key] = str(value).strip()
+    return out
+
+
+def _translation_status_from_unit1(
+    client: MediaWikiClient, norm_title: str, lang: str
+) -> dict[str, str]:
+    try:
+        unit1_title = _unit_title(norm_title, "1", lang)
+        unit1_text, _, _ = client.get_page_wikitext(unit1_title)
+        params = _parse_status_template(unit1_text)
+    except Exception:
+        return {}
+    out: dict[str, str] = {}
+    for key in ("status", "source_rev_at_translation", "reviewed_at", "reviewed_by", "outdated_source_rev"):
+        if params.get(key):
+            out_key = "dr_translation_status" if key == "status" else f"dr_{key}"
+            out[out_key] = str(params[key]).strip()
+    return out
 
 
 def _restore_file_links(source: str, translated: str) -> str:
@@ -594,21 +408,9 @@ def _protect_link_targets(text: str) -> tuple[str, dict[str, str]]:
 def _apply_termbase_safe(text: str, entries: list[dict[str, str | bool | None]]) -> str:
     if not entries:
         return text
-    # Keep disclaimer block URLs intact (e.g. Special:Translate group path).
-    disclaimer_placeholders: dict[str, str] = {}
-
-    def _mask_disclaimer(match: re.Match) -> str:
-        token = f"__DISC{len(disclaimer_placeholders)}__"
-        disclaimer_placeholders[token] = match.group(0)
-        return token
-
-    text = DISCLAIMER_TABLE_RE.sub(_mask_disclaimer, text)
     protected, placeholders = _protect_link_targets(text)
     updated = _apply_termbase(protected, entries)
-    restored = restore_wikitext(updated, placeholders)
-    for token, block in disclaimer_placeholders.items():
-        restored = restored.replace(token, block)
-    return restored
+    return restore_wikitext(updated, placeholders)
 
 
 def _normalize_leading_directives(text: str) -> str:
@@ -628,9 +430,75 @@ def _normalize_leading_directives(text: str) -> str:
 
 def _normalize_leading_div(text: str) -> str:
     # Avoid leading blank line/paragraph before a top-level div.
-    text = re.sub(r"(__NOTOC__)\s*\n+\s*(<div\b)", r"\1\n\2", text, count=1)
+    text = re.sub(r"(__NOTOC__)\s*\n+\s*(<div\b)", r"\1\2", text, count=1)
     text = re.sub(r"(\{\{DISPLAYTITLE:[^}]+\}\})\s*\n+\s*(__NOTOC__)\s*\n+\s*(<div\b)", r"\1__NOTOC__\3", text, count=1)
     return text
+
+
+def _normalize_leading_status_directives(text: str) -> str:
+    # Compact top metadata/directives into a single leading line:
+    # {{Translation_status...}}{{DISPLAYTITLE:...}}__NOTOC__[[File:...]]
+    text = re.sub(
+        r"(\{\{\s*Translation_status\b[^{}]*\}\})\s*\n+\s*(\{\{DISPLAYTITLE:[^}]+\}\})",
+        r"\1\2",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"(\{\{DISPLAYTITLE:[^}]+\}\})\s*\n+\s*(__NOTOC__)",
+        r"\1__NOTOC__",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"(__NOTOC__)\s*\n+\s*(\[\[File:[^\]]+\]\])",
+        r"\1\2",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    # Do not leave an empty spacer line before content after top metadata.
+    text = re.sub(
+        r"^((?:\{\{\s*Translation_status\b[^{}]*\}\})?(?:\{\{DISPLAYTITLE:[^}]+\}\})(?:__NOTOC__)?(?:\[\[File:[^\]]+\]\])?)\s*\n{2,}",
+        r"\1\n",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    return text
+
+
+def _compact_leading_metadata_preamble(text: str) -> str:
+    # Keep leading metadata directives contiguous with no blank line before content.
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines) and lines[i].strip() == "":
+        i += 1
+
+    preamble: list[str] = []
+    while i < len(lines):
+        line = lines[i].strip()
+        if line == "":
+            i += 1
+            continue
+        if LEADING_META_TOKEN_RE.fullmatch(line):
+            preamble.append(line)
+            i += 1
+            continue
+        break
+
+    if not preamble:
+        return text.lstrip("\n")
+
+    while i < len(lines) and lines[i].strip() == "":
+        i += 1
+
+    rest = "\n".join(lines[i:])
+    if rest:
+        return "".join(preamble) + rest
+    return "".join(preamble)
 
 
 def _normalize_heading_lines(text: str) -> str:
@@ -689,27 +557,6 @@ def _align_list_markers(source: str, translated: str) -> str:
 
 def _is_redirect_wikitext(text: str) -> bool:
     return bool(REDIRECT_RE.search(text.lstrip("\ufeff")))
-
-
-def _insert_disclaimer(
-    text: str,
-    disclaimer: str,
-    marker: str | None,
-    norm_title: str,
-    lang: str,
-    anchors: dict[str, dict[str, str]] | None,
-) -> str:
-    # Remove any existing disclaimer to prevent duplication.
-    text = DISCLAIMER_TABLE_RE.sub("", text).strip()
-    if marker and marker in text:
-        return text.replace(marker, f"\n\n{disclaimer}\n\n", 1)
-    if anchors and norm_title in anchors and lang in anchors[norm_title]:
-        anchor = anchors[norm_title][lang]
-        idx = text.find(anchor)
-        if idx != -1:
-            insert_at = idx + len(anchor)
-            return text[:insert_at] + "\n\n" + disclaimer + "\n\n" + text[insert_at:]
-    return f"{disclaimer}\n\n{text}"
 
 
 def _fetch_unit_sources(
@@ -771,7 +618,6 @@ def main() -> None:
     parser.add_argument("--title", required=True)
     parser.add_argument("--lang", default="sr")
     parser.add_argument("--engine-lang", default=None)
-    parser.add_argument("--disclaimer", default="")
     parser.add_argument("--fuzzy", action="store_true", default=False)
     parser.add_argument("--no-fuzzy", action="store_false", dest="fuzzy")
     parser.add_argument("--start-key", type=int, default=None)
@@ -829,6 +675,56 @@ def main() -> None:
     if _is_redirect_wikitext(wikitext):
         logging.getLogger("translate").info("skip redirect page: %s", norm_title)
         return
+    source_rev = str(rev_id)
+    translated_page_title = f"{norm_title}/{args.lang}"
+    props, _, _ = client.get_page_props(translated_page_title)
+    status_meta = _translation_status_from_props(props)
+    if "dr_translation_status" not in status_meta:
+        status_meta = {**status_meta, **_translation_status_from_unit1(client, norm_title, args.lang)}
+    status = status_meta.get("dr_translation_status", "").strip().lower() or "machine"
+    if status not in ("machine", "reviewed", "outdated"):
+        status = "machine"
+    if status in ("reviewed", "outdated"):
+        source_at_translation = status_meta.get("dr_source_rev_at_translation", "").strip()
+        if status == "reviewed" and source_at_translation != source_rev:
+            logging.getLogger("translate").info(
+                "status lock: %s is reviewed and source changed (%s -> %s); marking outdated",
+                translated_page_title,
+                source_at_translation or "?",
+                source_rev,
+            )
+            try:
+                unit1_title = _unit_title(norm_title, "1", args.lang)
+                unit1_text, _, _ = client.get_page_wikitext(unit1_title)
+                reviewed_at = status_meta.get("dr_reviewed_at", "")
+                reviewed_by = status_meta.get("dr_reviewed_by", "")
+                updated_unit1 = _upsert_status_template(
+                    _remove_disclaimer_tables(unit1_text),
+                    status="outdated",
+                    source_rev_at_translation=source_at_translation or source_rev,
+                    reviewed_at=reviewed_at or None,
+                    reviewed_by=reviewed_by or None,
+                    outdated_source_rev=source_rev,
+                )
+                if not args.dry_run:
+                    client.edit(
+                        unit1_title,
+                        updated_unit1,
+                        "Bot: mark translation status as outdated (source changed)",
+                        bot=True,
+                    )
+                    logging.getLogger("translate").info("edited %s", unit1_title)
+            except Exception as exc:
+                logging.getLogger("translate").warning(
+                    "failed to mark outdated for %s: %s", translated_page_title, exc
+                )
+            return {"status": "outdated"}
+        logging.getLogger("translate").info(
+            "status lock: skip translation for %s (status=%s)",
+            translated_page_title,
+            status,
+        )
+        return {"status": f"locked_{status}"}
     segments = _fetch_messagecollection_segments(client, norm_title, cfg.source_lang)
     if not segments:
         unit_keys = client.list_translation_unit_keys(norm_title, cfg.source_lang)
@@ -896,18 +792,22 @@ def main() -> None:
     for seg in segments:
         checksum = _checksum(seg.text)
         segment_checksums[seg.key] = checksum
-        if (
-            not args.no_cache
-            and not disable_cache
-            and existing_checksums.get(seg.key) == checksum
-            and cfg.pg_dsn
-        ):
+        if not args.no_cache and cfg.pg_dsn:
             try:
                 with get_conn(cfg.pg_dsn) as conn:
-                    cached = fetch_cached_translation(conn, f"{norm_title}::{seg.key}", args.lang)
+                    cached = None
+                    # L1: exact page/key cache hit when unit map is stable.
+                    if not disable_cache and existing_checksums.get(seg.key) == checksum:
+                        cached = fetch_cached_translation(conn, f"{norm_title}::{seg.key}", args.lang)
+                        if cached:
+                            cached_by_key[seg.key] = cached
+                            cached_source_by_key[seg.key] = "db-key"
+                            continue
+                    # L2: cross-page content cache hit by source checksum.
+                    cached = fetch_cached_translation_by_checksum(conn, checksum, args.lang)
                 if cached:
                     cached_by_key[seg.key] = cached
-                    cached_source_by_key[seg.key] = "db"
+                    cached_source_by_key[seg.key] = "db-checksum"
             except Exception:
                 pass
         if args.rebuild_only and seg.key not in cached_by_key:
@@ -921,6 +821,7 @@ def main() -> None:
                 pass
 
     to_translate = [seg for seg in segments if seg.key not in cached_by_key]
+    to_translate_keys = {seg.key for seg in to_translate}
     if args.rebuild_only and to_translate:
         missing = ", ".join(seg.key for seg in to_translate)
         raise SystemExit(f"rebuild-only: missing cached translations for keys {missing}")
@@ -962,11 +863,8 @@ def main() -> None:
     protected = []
     link_display_requests: dict[str, str] = {}
     source_by_key: dict[str, str] = {}
-    marker_key: str | None = None
     source_targets: set[str] = set()
     for seg in segments:
-        if cfg.disclaimer_marker and cfg.disclaimer_marker in seg.text and marker_key is None:
-            marker_key = seg.key
         link_text, link_placeholders, link_meta, seg_targets = _tokenize_links(seg.text, args.lang)
         source_targets.update(seg_targets)
         source_by_key[seg.key] = seg.text
@@ -1002,19 +900,24 @@ def main() -> None:
 
     translated_by_key: dict[str, str] = {}
     ordered_keys: list[str] = []
+    # Delta default: only changed units are rewritten.
+    # Segment 1 is always eligible because status/source-rev metadata is stored there.
+    if args.rebuild_only:
+        writable_keys: set[str] = {seg.key for seg in segments}
+    elif disable_cache:
+        # Unit map changed (for example after re-marking with new T-keys):
+        # write all current keys even when using checksum cache so new unit
+        # titles get populated.
+        writable_keys = {seg.key for seg in segments}
+        writable_keys.add("1")
+    else:
+        writable_keys = set(to_translate_keys)
+        writable_keys.add("1")
     for seg in segments:
         if seg.key in cached_by_key:
-            restored = cached_by_key[seg.key]
-            source_text = source_by_key.get(seg.key, "")
-            restored = _restore_file_links(source_text, restored)
-            if termbase_entries:
-                restored = _apply_termbase_safe(restored, termbase_entries)
-            restored = _strip_heading_list_prefix(restored)
-            restored = _normalize_heading_lines(restored)
-            restored = _align_list_markers(source_text, restored)
-            restored = _strip_empty_paragraphs(restored)
-            restored = _strip_unresolved_placeholders(restored)
-            translated_by_key[seg.key] = restored
+            # Keep cached unit text verbatim in delta mode. This prevents churn where
+            # unchanged units are repeatedly rewritten due normalization passes.
+            translated_by_key[seg.key] = cached_by_key[seg.key]
             ordered_keys.append(seg.key)
             continue
 
@@ -1055,54 +958,6 @@ def main() -> None:
         translated_by_key[seg.key] = restored
         ordered_keys.append(seg.key)
 
-    disclaimer = args.disclaimer or _build_disclaimer(norm_title, args.lang)
-    inserted = False
-    allow_disclaimer = False
-    if marker_key and marker_key in ordered_keys:
-        allow_disclaimer = True
-    # Segment-only reruns (e.g. --max-keys 1) can rewrite key 1 and drop an
-    # existing disclaimer unless we reinsert it.
-    if "1" in ordered_keys:
-        allow_disclaimer = True
-    if not cfg.disclaimer_marker and "1" in ordered_keys:
-        allow_disclaimer = True
-    if allow_disclaimer:
-        if cfg.disclaimer_marker:
-            for key in ordered_keys:
-                text = translated_by_key[key]
-                if cfg.disclaimer_marker in text:
-                    translated_by_key[key] = _insert_disclaimer(
-                        text, disclaimer, cfg.disclaimer_marker, norm_title, args.lang, cfg.disclaimer_anchors
-                    )
-                    inserted = True
-                    break
-
-        if not inserted and marker_key and marker_key in translated_by_key:
-            translated_by_key[marker_key] = _insert_disclaimer(
-                translated_by_key[marker_key],
-                disclaimer,
-                cfg.disclaimer_marker,
-                norm_title,
-                args.lang,
-                cfg.disclaimer_anchors,
-            )
-            inserted = True
-
-        if not inserted and ordered_keys:
-            first_key = ordered_keys[0]
-            translated_by_key[first_key] = _insert_disclaimer(
-                translated_by_key[first_key],
-                disclaimer,
-                cfg.disclaimer_marker,
-                norm_title,
-                args.lang,
-                cfg.disclaimer_anchors,
-            )
-
-        if cfg.disclaimer_marker:
-            for key in ordered_keys:
-                translated_by_key[key] = translated_by_key[key].replace(cfg.disclaimer_marker, "")
-
     # Remove any displaytitles from translated segments and add a single one.
     if ordered_keys and "1" in ordered_keys:
         displaytitle_value = None
@@ -1142,6 +997,9 @@ def main() -> None:
         translated_by_key["1"] = _normalize_leading_directives(
             translated_by_key["1"]
         )
+        translated_by_key["1"] = _normalize_leading_status_directives(
+            translated_by_key["1"]
+        )
         translated_by_key["1"] = _normalize_leading_div(
             translated_by_key["1"]
         )
@@ -1149,31 +1007,56 @@ def main() -> None:
             translated_by_key["1"]
         )
 
+    if "1" in translated_by_key:
+        existing_status_tpl = _parse_status_template(translated_by_key["1"])
+        translated_by_key["1"] = _upsert_status_template(
+            _remove_disclaimer_tables(translated_by_key["1"]),
+            status="machine",
+            source_rev_at_translation=source_rev,
+            reviewed_at=existing_status_tpl.get("reviewed_at"),
+            reviewed_by=existing_status_tpl.get("reviewed_by"),
+        )
+
     for key in ordered_keys:
         translated_by_key[key] = _strip_empty_paragraphs(translated_by_key[key])
-        if termbase_entries:
+        translated_by_key[key] = _remove_disclaimer_tables(translated_by_key[key])
+        if termbase_entries and key in to_translate_keys:
             translated_by_key[key] = _apply_termbase_safe(
                 translated_by_key[key], termbase_entries
             )
-        translated_by_key[key] = _align_list_markers(
-            source_by_key.get(key, ""), translated_by_key[key]
-        )
+        if key in to_translate_keys:
+            translated_by_key[key] = _align_list_markers(
+                source_by_key.get(key, ""), translated_by_key[key]
+            )
         translated_by_key[key] = _strip_unresolved_placeholders(translated_by_key[key])
 
-    # Final pass after disclaimer/displaytitle insertion
+    # Final pass after status/displaytitle insertion
     for key in ordered_keys:
         translated_by_key[key] = _strip_unresolved_placeholders(translated_by_key[key])
 
     for key in ordered_keys:
+        if key not in writable_keys:
+            continue
         restored = translated_by_key[key]
         source_text = source_by_key.get(key, "")
         restored = _restore_file_links(source_text, restored)
+        if key == "1":
+            restored = _compact_leading_metadata_preamble(restored)
         unit_title = _unit_title(norm_title, key, args.lang)
-        summary = "Machine translation by bot (draft, needs review)"
+        summary = "Machine translation by bot"
 
         if args.dry_run:
             logging.getLogger("translate").info("DRY RUN edit %s", unit_title)
             continue
+
+        try:
+            current_text, _, _ = client.get_page_wikitext(unit_title)
+            if current_text.strip() == restored.strip():
+                logging.getLogger("translate").info("skip unchanged %s", unit_title)
+                continue
+        except MediaWikiError:
+            # Unit might not exist yet; continue with edit.
+            pass
 
         newrev = client.edit(unit_title, restored, summary, bot=True)
         logging.getLogger("translate").info("edited %s", unit_title)
@@ -1197,6 +1080,38 @@ def main() -> None:
                 pass
         if args.sleep_ms > 0:
             time.sleep(args.sleep_ms / 1000.0)
+
+    if (
+        not args.dry_run
+        and ordered_keys
+        and "1" not in ordered_keys
+    ):
+        try:
+            unit1_title = _unit_title(norm_title, "1", args.lang)
+            unit1_text, _, _ = client.get_page_wikitext(unit1_title)
+            existing_status_tpl = _parse_status_template(unit1_text)
+            unit1_updated = _upsert_status_template(
+                _remove_disclaimer_tables(unit1_text),
+                status="machine",
+                source_rev_at_translation=source_rev,
+                reviewed_at=existing_status_tpl.get("reviewed_at"),
+                reviewed_by=existing_status_tpl.get("reviewed_by"),
+            )
+            unit1_updated = _compact_leading_metadata_preamble(unit1_updated)
+            client.edit(
+                unit1_title,
+                unit1_updated,
+                "Bot: sync translation status metadata",
+                bot=True,
+            )
+            logging.getLogger("translate").info("edited %s", unit1_title)
+        except Exception as exc:
+            logging.getLogger("translate").warning(
+                "failed to sync status template for %s/%s: %s",
+                norm_title,
+                args.lang,
+                exc,
+            )
 
     if args.auto_approve:
         assembled_title = f"{norm_title}/{args.lang}"

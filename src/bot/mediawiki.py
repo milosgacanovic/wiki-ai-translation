@@ -156,6 +156,21 @@ class MediaWikiClient:
         rev = revisions[0]
         return int(rev["revid"]), normalized_title
 
+    def get_page_props(self, title: str) -> tuple[dict[str, Any], str, bool]:
+        data = self._request(
+            "GET",
+            {
+                "action": "query",
+                "prop": "pageprops",
+                "titles": title,
+            },
+        )
+        page = data["query"]["pages"][0]
+        normalized_title = page.get("title", title)
+        missing = bool(page.get("missing"))
+        props = page.get("pageprops") or {}
+        return props, normalized_title, missing
+
     def iter_translation_base_titles(
         self, source_lang: str = "en"
     ) -> list[str]:
@@ -180,6 +195,28 @@ class MediaWikiClient:
             if not apcontinue:
                 break
         return sorted(titles)
+
+    def iter_main_namespace_titles(self) -> list[str]:
+        titles: list[str] = []
+        apcontinue = None
+        while True:
+            params = {
+                "action": "query",
+                "list": "allpages",
+                "apnamespace": 0,
+                "aplimit": 500,
+            }
+            if apcontinue:
+                params["apcontinue"] = apcontinue
+            data = self._request("GET", params)
+            for page in data.get("query", {}).get("allpages", []):
+                title = page.get("title")
+                if title:
+                    titles.append(str(title))
+            apcontinue = data.get("continue", {}).get("apcontinue")
+            if not apcontinue:
+                break
+        return sorted(set(titles))
 
     def get_message_collection(self, group_id: str, lang: str) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []

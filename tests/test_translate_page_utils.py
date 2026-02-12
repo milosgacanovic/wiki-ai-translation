@@ -7,6 +7,7 @@ from bot.translate_page import (
     _fix_broken_links,
     _restore_file_links,
     _source_title_for_displaytitle,
+    _normalize_leading_status_directives,
 )
 from bot.segmenter import Segment
 
@@ -72,4 +73,21 @@ def test_source_title_for_displaytitle_falls_back_to_leaf_title():
             segments,
         )
         == "Acknowledgment"
+    )
+
+
+def test_normalize_leading_status_directives():
+    text = (
+        "{{Translation_status|status=machine|source_rev_at_translation=5996}}\n"
+        "{{DISPLAYTITLE:InnerMotion – Vodič – Zahvalnica}}\n\n"
+        "__NOTOC__\n"
+        "[[File:InnerMotion - The Guidebook - Acknowledgment.jpg|right|frameless]]\n"
+        "Body"
+    )
+    out = _normalize_leading_status_directives(text)
+    assert out.startswith(
+        "{{Translation_status|status=machine|source_rev_at_translation=5996}}"
+        "{{DISPLAYTITLE:InnerMotion – Vodič – Zahvalnica}}"
+        "__NOTOC__"
+        "[[File:InnerMotion - The Guidebook - Acknowledgment.jpg|right|frameless]]"
     )

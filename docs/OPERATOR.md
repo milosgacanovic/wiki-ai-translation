@@ -27,22 +27,61 @@
 - Backfill cursor is stored in `ingest_state` for resume.
 - API rate-limit backoff is automatic: 1s, 2s, 4s, 8s (max 5 attempts).
 
-## Disclaimer Placement
-Optional per-page placement is supported with `BOT_DISCLAIMER_ANCHORS`:
+Recommended standard pipeline (most common production mode):
+1. Cron calls `wiki-translate-runner --poll-once`.
+2. Ingest detects changed source pages.
+3. Ingest refreshes translation units (mark-for-translation API).
+4. Jobs are enqueued and translated automatically.
+5. Delta behavior is default: unchanged segments use cache, only changed segments go to MT.
+6. Publish behavior is delta too: unchanged units are not rewritten; unit `1` may still update to refresh translation status/source revision metadata.
+7. Cache has two levels: exact page-unit key and content checksum fallback (cross-page reuse).
+
+Important:
+- Do not rely on manual direct translation commands for normal operation.
+- Use direct commands only for explicit force runs (for example `--no-cache` maintenance retranslate).
+- For manual test sessions, you can clear queued translation jobs first:
+  `wiki-translate-runner --clear-queue`
+- For delta preview without mutating queue/cursor:
+  `wiki-translate-runner --poll-once --dry-run`
+- `--plan` is kept as a compatibility alias for `--dry-run` with `--poll-once`.
+
+## Translation Status
+The bot stores translation state using `{{Translation_status}}` in segment `1`.
+
+Supported states:
+- `machine`: bot can update when source changes.
+- `reviewed`: bot skips translation content updates.
+- `outdated`: bot skips translation content updates.
+
+Segment `1` formatting invariant:
+- Leading metadata directives must remain contiguous with no blank/new lines before first content.
+- Target shape: `{{Translation_status...}}{{DISPLAYTITLE:...}}__NOTOC__<div ...>`
+
+When source changes and state is `reviewed`, bot marks it `outdated` (metadata-only change).
+
+Install/update status UI artifacts:
 
 ```bash
-BOT_DISCLAIMER_ANCHORS={"Welcome_to_the_DanceResource_Wiki":{"sr":"To learn what we stand for, read our Core Values, and explore the vision that moves us in the Manifesto."}}
+wiki-translate-status-ui
 ```
 
-If the anchor is found in any translated segment, the disclaimer is inserted after it.
-
-You can also use an invisible marker in source wikitext (recommended for editors):
+Migrate existing translated pages to status template:
 
 ```bash
-BOT_DISCLAIMER_MARKER=<!--BOT_DISCLAIMER-->
+wiki-translate-status-migrate
 ```
 
-Place `<!--BOT_DISCLAIMER-->` where the disclaimer should appear.
+Sync reviewed-page metadata (`source_rev_at_translation`) after human review edits:
+
+```bash
+wiki-translate-status-sync-reviewed
+```
+
+Approve synced pages in the same run:
+
+```bash
+wiki-translate-status-sync-reviewed --approve
+```
 
 ## Skip Prefixes
 Skip translation for titles starting with these prefixes:
@@ -88,7 +127,7 @@ BOT_GCP_GLOSSARIES={"sr":"dr-sr-glossary"}
 Re-run the translation to apply glossary enforcement.
 
 ## Safety
-- Edits are marked as bot edits and include a machine-translation disclaimer.
+- Edits are marked as bot edits; no visible disclaimer paragraph is injected into translated content.
 - QA failures block publishing.
 - Auto-wrap for translation uses `<translate>...</translate>` and is idempotent.
 
