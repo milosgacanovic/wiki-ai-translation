@@ -272,6 +272,66 @@ def _translation_status_from_props(props: dict[str, object]) -> dict[str, str]:
     return out
 
 
+def _translation_status_from_ai_info(info: dict[str, object]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    status = info.get("status")
+    if status:
+        out["dr_translation_status"] = str(status).strip()
+    source_rev = info.get("source_rev")
+    if source_rev is not None and str(source_rev).strip():
+        out["dr_source_rev_at_translation"] = str(source_rev).strip()
+    outdated_source_rev = info.get("outdated_source_rev")
+    if outdated_source_rev is not None and str(outdated_source_rev).strip():
+        out["dr_outdated_source_rev"] = str(outdated_source_rev).strip()
+    reviewed_by = info.get("reviewed_by")
+    if reviewed_by:
+        out["dr_reviewed_by"] = str(reviewed_by).strip()
+    reviewed_at = info.get("reviewed_at")
+    if reviewed_at:
+        out["dr_reviewed_at"] = str(reviewed_at).strip()
+    return out
+
+
+def _write_ai_status_with_retry(
+    client: MediaWikiClient,
+    translated_title: str,
+    status: str,
+    source_rev: str | None = None,
+    outdated_source_rev: str | None = None,
+    source_title: str | None = None,
+    source_lang: str | None = None,
+) -> None:
+    logger = logging.getLogger("translate")
+    for attempt in range(2):
+        try:
+            client.set_ai_translation_status(
+                title=translated_title,
+                status=status,
+                source_rev=source_rev,
+                outdated_source_rev=outdated_source_rev,
+                source_title=source_title,
+                source_lang=source_lang,
+            )
+            logger.info(
+                "updated ai metadata for %s (status=%s, source_rev=%s)",
+                translated_title,
+                status,
+                source_rev or "",
+            )
+            return
+        except Exception as exc:
+            if attempt == 0:
+                time.sleep(1)
+                continue
+            logger.warning(
+                "failed to update ai translation metadata for %s (status=%s, source_rev=%s): %s",
+                translated_title,
+                status,
+                source_rev or "",
+                exc,
+            )
+
+
 def _translation_status_from_unit1(
     client: MediaWikiClient, norm_title: str, lang: str
 ) -> dict[str, str]:
@@ -677,8 +737,18 @@ def main() -> None:
         return
     source_rev = str(rev_id)
     translated_page_title = f"{norm_title}/{args.lang}"
+    ai_info: dict[str, object] = {}
+    try:
+        ai_info = client.get_ai_translation_info(translated_page_title)
+    except Exception as exc:
+        logging.getLogger("translate").warning(
+            "failed to read ai translation metadata for %s: %s",
+            translated_page_title,
+            exc,
+        )
     props, _, _ = client.get_page_props(translated_page_title)
-    status_meta = _translation_status_from_props(props)
+    status_meta = _translation_status_from_ai_info(ai_info)
+    status_meta = {**_translation_status_from_props(props), **status_meta}
     if "dr_translation_status" not in status_meta:
         status_meta = {**status_meta, **_translation_status_from_unit1(client, norm_title, args.lang)}
     status = status_meta.get("dr_translation_status", "").strip().lower() or "machine"
@@ -696,15 +766,9 @@ def main() -> None:
             try:
                 unit1_title = _unit_title(norm_title, "1", args.lang)
                 unit1_text, _, _ = client.get_page_wikitext(unit1_title)
-                reviewed_at = status_meta.get("dr_reviewed_at", "")
-                reviewed_by = status_meta.get("dr_reviewed_by", "")
                 updated_unit1 = _upsert_status_template(
                     _remove_disclaimer_tables(unit1_text),
                     status="outdated",
-                    source_rev_at_translation=source_at_translation or source_rev,
-                    reviewed_at=reviewed_at or None,
-                    reviewed_by=reviewed_by or None,
-                    outdated_source_rev=source_rev,
                 )
                 if not args.dry_run:
                     client.edit(
@@ -714,6 +778,15 @@ def main() -> None:
                         bot=True,
                     )
                     logging.getLogger("translate").info("edited %s", unit1_title)
+                    _write_ai_status_with_retry(
+                        client=client,
+                        translated_title=translated_page_title,
+                        status="outdated",
+                        source_rev=source_at_translation or source_rev,
+                        outdated_source_rev=source_rev,
+                        source_title=norm_title,
+                        source_lang=cfg.source_lang,
+                    )
             except Exception as exc:
                 logging.getLogger("translate").warning(
                     "failed to mark outdated for %s: %s", translated_page_title, exc
@@ -1008,13 +1081,9 @@ def main() -> None:
         )
 
     if "1" in translated_by_key:
-        existing_status_tpl = _parse_status_template(translated_by_key["1"])
         translated_by_key["1"] = _upsert_status_template(
             _remove_disclaimer_tables(translated_by_key["1"]),
             status="machine",
-            source_rev_at_translation=source_rev,
-            reviewed_at=existing_status_tpl.get("reviewed_at"),
-            reviewed_by=existing_status_tpl.get("reviewed_by"),
         )
 
     for key in ordered_keys:
@@ -1089,13 +1158,9 @@ def main() -> None:
         try:
             unit1_title = _unit_title(norm_title, "1", args.lang)
             unit1_text, _, _ = client.get_page_wikitext(unit1_title)
-            existing_status_tpl = _parse_status_template(unit1_text)
             unit1_updated = _upsert_status_template(
                 _remove_disclaimer_tables(unit1_text),
                 status="machine",
-                source_rev_at_translation=source_rev,
-                reviewed_at=existing_status_tpl.get("reviewed_at"),
-                reviewed_by=existing_status_tpl.get("reviewed_by"),
             )
             unit1_updated = _compact_leading_metadata_preamble(unit1_updated)
             client.edit(
@@ -1125,6 +1190,16 @@ def main() -> None:
         client.approve_revision(assembled_rev)
         logging.getLogger("translate").info(
             "approved assembled page %s", assembled_title
+        )
+
+    if not args.dry_run:
+        _write_ai_status_with_retry(
+            client=client,
+            translated_title=translated_page_title,
+            status="machine",
+            source_rev=source_rev,
+            source_title=norm_title,
+            source_lang=cfg.source_lang,
         )
 
 

@@ -10,11 +10,12 @@ from .logging import configure_logging
 from .mediawiki import MediaWikiClient
 from .translate_page import (
     _collapse_blank_lines,
+    _compact_leading_metadata_preamble,
     _normalize_leading_directives,
     _normalize_leading_div,
     _normalize_leading_status_directives,
-    _parse_status_template,
     _remove_disclaimer_tables,
+    _translation_status_from_ai_info,
     _translation_status_from_props,
     _translation_status_from_unit1,
     _unit_title,
@@ -30,6 +31,7 @@ def _normalize_unit1(text: str) -> str:
     text = _normalize_leading_directives(text)
     text = _normalize_leading_status_directives(text)
     text = _normalize_leading_div(text)
+    text = _compact_leading_metadata_preamble(text)
     return _collapse_blank_lines(text)
 
 
@@ -77,8 +79,14 @@ def main() -> None:
                 continue
 
             scanned += 1
+            ai_info = {}
+            try:
+                ai_info = client.get_ai_translation_info(translated_title)
+            except Exception:
+                ai_info = {}
             props, _, _ = client.get_page_props(translated_title)
-            status_meta = _translation_status_from_props(props)
+            status_meta = _translation_status_from_ai_info(ai_info)
+            status_meta = {**_translation_status_from_props(props), **status_meta}
             if "dr_translation_status" not in status_meta:
                 status_meta = {**status_meta, **_translation_status_from_unit1(client, norm_title, lang)}
             status = status_meta.get("dr_translation_status", "").strip().lower()
@@ -94,17 +102,9 @@ def main() -> None:
                 log.warning("read failed %s: %s", unit1, exc)
                 continue
 
-            existing = _parse_status_template(unit1_text)
-            reviewed_at = existing.get("reviewed_at") or status_meta.get("dr_reviewed_at")
-            reviewed_by = existing.get("reviewed_by") or status_meta.get("dr_reviewed_by")
-
             updated = _upsert_status_template(
                 unit1_text,
                 status="reviewed",
-                source_rev_at_translation=source_rev_s,
-                reviewed_at=reviewed_at or None,
-                reviewed_by=reviewed_by or None,
-                outdated_source_rev=None,
             )
             updated = _normalize_unit1(updated)
 
@@ -127,6 +127,19 @@ def main() -> None:
                         continue
             else:
                 skipped += 1
+
+            if not args.dry_run:
+                try:
+                    client.set_ai_translation_status(
+                        title=translated_title,
+                        status="reviewed",
+                        source_rev=source_rev_s,
+                        source_title=norm_title,
+                        source_lang=cfg.source_lang,
+                    )
+                except Exception as exc:
+                    errors += 1
+                    log.warning("ai props write failed %s: %s", translated_title, exc)
 
             if args.approve and not args.dry_run:
                 try:

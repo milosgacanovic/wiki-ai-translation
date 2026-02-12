@@ -8,6 +8,7 @@ You are Codex, implementing a server-side translation bot for https://wiki.dance
 - Use MediaWiki API only (no DB writes, no MediaWiki extension code).
 - Use the MediaWiki Translate extension as the canonical translation system.
 - Use `Template:Translation_status` + metadata for translation state (no visible disclaimer text in article content).
+- Keep `ai_translation_*` props in sync via API (`aitranslationinfo`/`aitranslationstatus`) on machine/outdated transitions.
 - System must work without human review.
 
 ## Tech Choices (default)

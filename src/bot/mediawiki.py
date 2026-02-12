@@ -171,6 +171,59 @@ class MediaWikiClient:
         props = page.get("pageprops") or {}
         return props, normalized_title, missing
 
+    def get_ai_translation_info(self, title: str) -> dict[str, Any]:
+        data = self._request(
+            "GET",
+            {
+                "action": "aitranslationinfo",
+                "title": title,
+            },
+        )
+        info = data.get("aitranslationinfo")
+        if isinstance(info, dict):
+            return info
+        return {}
+
+    def set_ai_translation_status(
+        self,
+        title: str,
+        status: str,
+        source_rev: str | None = None,
+        outdated_source_rev: str | None = None,
+        source_title: str | None = None,
+        source_lang: str | None = None,
+        reviewed_by: str | None = None,
+        reviewed_at: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.csrf_token:
+            raise MediaWikiError("csrf token missing; call login() first")
+        params: dict[str, Any] = {
+            "action": "aitranslationstatus",
+            "title": title,
+            "status": status,
+            "token": self.csrf_token,
+        }
+        if source_rev:
+            params["source_rev"] = source_rev
+        if outdated_source_rev:
+            params["outdated_source_rev"] = outdated_source_rev
+        if source_title:
+            params["source_title"] = source_title
+        if source_lang:
+            params["source_lang"] = source_lang
+        if reviewed_by:
+            params["reviewed_by"] = reviewed_by
+        if reviewed_at:
+            params["reviewed_at"] = reviewed_at
+        data = self._request("POST", params)
+        result = data.get("aitranslationstatus")
+        if not isinstance(result, dict):
+            raise MediaWikiError(f"aitranslationstatus failed: {data}")
+        outcome = str(result.get("result", "")).strip().lower()
+        if outcome != "ok":
+            raise MediaWikiError(f"aitranslationstatus failed: {result}")
+        return result
+
     def iter_translation_base_titles(
         self, source_lang: str = "en"
     ) -> list[str]:

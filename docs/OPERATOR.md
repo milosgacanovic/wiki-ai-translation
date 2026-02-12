@@ -47,6 +47,9 @@ Important:
 
 ## Translation Status
 The bot stores translation state using `{{Translation_status}}` in segment `1`.
+In parallel, it writes `ai_translation_*` metadata using custom API endpoints:
+- `action=aitranslationinfo` (read)
+- `action=aitranslationstatus` (write)
 
 Supported states:
 - `machine`: bot can update when source changes.
@@ -58,6 +61,7 @@ Segment `1` formatting invariant:
 - Target shape: `{{Translation_status...}}{{DISPLAYTITLE:...}}__NOTOC__<div ...>`
 
 When source changes and state is `reviewed`, bot marks it `outdated` (metadata-only change).
+The bot also writes `status=outdated` and `outdated_source_rev` through `aitranslationstatus`.
 
 Install/update status UI artifacts:
 
@@ -69,6 +73,12 @@ Migrate existing translated pages to status template:
 
 ```bash
 wiki-translate-status-migrate
+```
+
+Backfill AI props and compact templates to status-only:
+
+```bash
+wiki-translate-ai-props-backfill
 ```
 
 Sync reviewed-page metadata (`source_rev_at_translation`) after human review edits:

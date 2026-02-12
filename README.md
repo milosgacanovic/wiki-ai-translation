@@ -162,6 +162,12 @@ Migrate existing translated pages to `{{Translation_status}}`:
 wiki-translate-status-migrate
 ```
 
+Backfill `ai_translation_*` props for translated pages and compact template to status-only:
+
+```bash
+wiki-translate-ai-props-backfill
+```
+
 Sync reviewed-page metadata (`source_rev_at_translation`) to current source revision:
 
 ```bash
@@ -277,7 +283,8 @@ BOT_TRANSLATE_MARK_PARAMS={"title":"{title}","translatetitle":"yes"}
 If the API module is unavailable, leave these empty and mark pages manually or enable it server-side.
 
 ## Translation Status System
-The bot uses `{{Translation_status}}` metadata in translated pages instead of inserting visible disclaimer text into article content.
+The bot uses `{{Translation_status}}` in translated pages (status only) and stores revision metadata in
+`ai_translation_*` page props.
 
 Supported status values:
 - `machine`: bot can update translation when source changes.
@@ -293,6 +300,12 @@ Reviewed workflow note:
   `source_rev_at_translation` is aligned with the current source revision for reliable outdated detection.
 
 The bot writes the status template into segment `1` and updates source revision metadata.
+It writes `ai_translation_*` metadata via API on translated pages:
+- read: `action=aitranslationinfo`
+- write: `action=aitranslationstatus`
+- required writes on machine/outdated transitions: `status`, `source_rev`/`outdated_source_rev`,
+  `source_title`, `source_lang`
+- metadata write failures are warning-only (translation content writes are not rolled back)
 
 Metadata formatting rule (segment `1`):
 - Keep leading metadata directives contiguous with no blank/new lines before first content token.

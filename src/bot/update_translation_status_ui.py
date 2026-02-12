@@ -17,15 +17,11 @@ COMMON_JS_TITLE = "MediaWiki:Common.js"
 JS_START = "// DR_TRANSLATION_STATUS_BANNER_START"
 JS_END = "// DR_TRANSLATION_STATUS_BANNER_END"
 
-TEMPLATE_TEXT = """<includeonly><!-- Translation_status: status={{{status|machine}}};source_rev_at_translation={{{source_rev_at_translation|}}};reviewed_at={{{reviewed_at|}}};reviewed_by={{{reviewed_by|}}};outdated_source_rev={{{outdated_source_rev|}}} --></includeonly><noinclude>
+TEMPLATE_TEXT = """<includeonly><!-- Translation_status: status={{{status|machine}}} --></includeonly><noinclude>
 Template used by bot-managed translated pages.
 
 Parameters:
 * status = machine|reviewed|outdated
-* source_rev_at_translation = source revision id used by machine translation
-* reviewed_at = ISO date/time
-* reviewed_by = reviewer username
-* outdated_source_rev = current source revision when reviewed translation became outdated
 
 This template intentionally renders no visible content.
 </noinclude>

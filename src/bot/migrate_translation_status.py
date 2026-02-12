@@ -82,7 +82,6 @@ def main() -> None:
             updated = _upsert_status_template(
                 _remove_disclaimer_tables(unit1_text),
                 status="machine",
-                source_rev_at_translation=str(source_rev),
             )
             # Keep top metadata/directives compact and avoid extra blank lines.
             updated = _normalize_leading_directives(updated)
