@@ -11,6 +11,8 @@ from bot.translate_page import (
     _restore_html_tags,
     _source_title_for_displaytitle,
     _normalize_leading_status_directives,
+    _compact_leading_metadata_preamble,
+    _upsert_status_template,
 )
 from bot.segmenter import Segment
 
@@ -117,3 +119,24 @@ def test_tokenize_links_keeps_label_translatable_and_protects_markup():
 def test_missing_required_tokens_detects_dropped_link_tokens():
     required = {"ZZZLINK0ZZZ", "ZZZLINK1ZZZ"}
     assert _missing_required_tokens("x ZZZLINK0ZZZ y", required) == {"ZZZLINK1ZZZ"}
+
+
+def test_compact_leading_metadata_preamble_with_notoc_file_same_line():
+    text = (
+        "{{Translation_status|status=machine}}{{DISPLAYTITLE:InnerMotion - The Guidebook}}\n\n"
+        "__NOTOC__[[File:InnerMotion - The Guide - Cover.jpg|border|right|frameless]]\n"
+        "Body"
+    )
+    out = _compact_leading_metadata_preamble(text)
+    assert out.startswith(
+        "{{Translation_status|status=machine}}{{DISPLAYTITLE:InnerMotion - The Guidebook}}"
+        "__NOTOC__[[File:InnerMotion - The Guide - Cover.jpg|border|right|frameless]]"
+    )
+
+
+def test_upsert_status_template_compacts_displaytitle_notoc_gap():
+    text = "{{DISPLAYTITLE:InnerMotion - The Guidebook}}\n\n__NOTOC__\nBody"
+    out = _upsert_status_template(text, status="machine")
+    assert out.startswith(
+        "{{Translation_status|status=machine}}{{DISPLAYTITLE:InnerMotion - The Guidebook}}__NOTOC__"
+    )

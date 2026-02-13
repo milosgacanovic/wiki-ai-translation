@@ -61,6 +61,10 @@ LEADING_META_TOKEN_RE = re.compile(
     r"(?:\{\{[^{}\n]+\}\}|__[A-Z0-9_]+__|\[\[(?:File|Image):[^\]]+\]\]|<!--.*?-->)",
     re.IGNORECASE,
 )
+LEADING_META_LINE_RE = re.compile(
+    r"(?:\{\{[^{}\n]+\}\}|__[A-Z0-9_]+__|\[\[(?:File|Image):[^\]]+\]\]|<!--.*?-->)+",
+    re.IGNORECASE,
+)
 
 
 def _is_safe_internal_link(target: str) -> bool:
@@ -262,8 +266,13 @@ def _upsert_status_template(
         outdated_source_rev=outdated_source_rev,
     )
     if base.startswith("{{DISPLAYTITLE:"):
-        return f"{tpl}{base}".strip()
-    return f"{tpl}\n{base}".strip()
+        out = f"{tpl}{base}".strip()
+    else:
+        out = f"{tpl}\n{base}".strip()
+    out = _normalize_leading_status_directives(out)
+    out = _compact_leading_metadata_preamble(out)
+    out = _normalize_leading_div(out)
+    return out
 
 
 def _translation_status_from_props(props: dict[str, object]) -> dict[str, str]:
@@ -578,7 +587,7 @@ def _compact_leading_metadata_preamble(text: str) -> str:
         if line == "":
             i += 1
             continue
-        if LEADING_META_TOKEN_RE.fullmatch(line):
+        if LEADING_META_LINE_RE.fullmatch(line):
             preamble.append(line)
             i += 1
             continue
