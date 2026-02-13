@@ -3,7 +3,9 @@ from bot.translate_page import (
     _apply_termbase,
     _apply_termbase_safe,
     _is_redirect_wikitext,
+    _missing_required_tokens,
     _strip_unresolved_placeholders,
+    _tokenize_links,
     _fix_broken_links,
     _restore_file_links,
     _restore_html_tags,
@@ -101,3 +103,17 @@ def test_normalize_leading_status_directives():
         "__NOTOC__"
         "[[File:InnerMotion - The Guidebook - Acknowledgment.jpg|right|frameless]]"
     )
+
+
+def test_tokenize_links_keeps_label_translatable_and_protects_markup():
+    text = "[[Conscious Dance Practices/InnerMotion/The Guidebook|reading the InnerMotion Guidebook]]"
+    tokenized, placeholders, _, _, required = _tokenize_links(text, "it")
+    assert tokenized.startswith("ZZZLINK")
+    assert any(t.startswith("ZZZLINK") for t in required)
+    assert "[[" not in tokenized and "]]" not in tokenized
+    assert any(v.startswith("[[Conscious Dance Practices/InnerMotion/The Guidebook/it|") for v in placeholders.values())
+
+
+def test_missing_required_tokens_detects_dropped_link_tokens():
+    required = {"ZZZLINK0ZZZ", "ZZZLINK1ZZZ"}
+    assert _missing_required_tokens("x ZZZLINK0ZZZ y", required) == {"ZZZLINK1ZZZ"}

@@ -69,10 +69,11 @@ def _is_safe_internal_link(target: str) -> bool:
 
 def _tokenize_links(
     text: str, lang: str
-) -> tuple[str, dict[str, str], list[tuple[str, str]], set[str]]:
+) -> tuple[str, dict[str, str], list[tuple[str, str]], set[str], set[str]]:
     placeholders: dict[str, str] = {}
     link_meta: list[tuple[str, str]] = []
     source_targets: set[str] = set()
+    required_tokens: set[str] = set()
 
     def _replace(match: re.Match) -> str:
         target = match.group(1)
@@ -89,17 +90,18 @@ def _tokenize_links(
         if anchor:
             new_target = f"{new_target}#{anchor}"
 
-        token = f"__LINK{len(placeholders)}__"
-        placeholders[token] = new_target
-
+        token = f"ZZZLINK{len(placeholders)}ZZZ"
         if display is None:
-            display = target
-            # Implicit display: do not translate to avoid changing names
+            # Implicit display: keep full link protected to avoid changing names.
+            placeholders[token] = f"[[{new_target}]]"
         else:
+            # Explicit display is translated separately via link_display_translated.
+            placeholders[token] = f"[[{new_target}|{display}]]"
             link_meta.append((new_target, display))
-        return f"[[{token}|{display}]]"
+        required_tokens.add(token)
+        return token
 
-    return LINK_RE.sub(_replace, text), placeholders, link_meta, source_targets
+    return LINK_RE.sub(_replace, text), placeholders, link_meta, source_targets, required_tokens
 
 
 
@@ -117,6 +119,14 @@ def _collapse_blank_lines(text: str) -> str:
 
 def _strip_unresolved_placeholders(text: str) -> str:
     return UNRESOLVED_PLACEHOLDER_RE.sub("", text)
+
+
+def _missing_required_tokens(text: str, required_tokens: set[str]) -> set[str]:
+    missing: set[str] = set()
+    for token in required_tokens:
+        if token not in text:
+            missing.add(token)
+    return missing
 
 
 def _dedupe_displaytitle(text: str) -> str:
@@ -966,11 +976,19 @@ def main() -> None:
 
     protected = []
     link_display_requests: dict[str, str] = {}
+    required_link_tokens_by_key: dict[str, set[str]] = {}
     source_by_key: dict[str, str] = {}
     source_targets: set[str] = set()
     for seg in segments:
-        link_text, link_placeholders, link_meta, seg_targets = _tokenize_links(seg.text, args.lang)
+        (
+            link_text,
+            link_placeholders,
+            link_meta,
+            seg_targets,
+            required_link_tokens,
+        ) = _tokenize_links(seg.text, args.lang)
         source_targets.update(seg_targets)
+        required_link_tokens_by_key[seg.key] = required_link_tokens
         source_by_key[seg.key] = seg.text
         if seg.key in cached_by_key:
             continue
@@ -1026,6 +1044,15 @@ def main() -> None:
             continue
 
         ph, tr = protected_map[seg.key]
+        missing_link_tokens = _missing_required_tokens(
+            tr.text, required_link_tokens_by_key.get(seg.key, set())
+        )
+        if missing_link_tokens:
+            raise RuntimeError(
+                f"link placeholder loss in segment {seg.key} for {norm_title}/{args.lang}: "
+                f"{', '.join(sorted(missing_link_tokens))}"
+            )
+
         restored = restore_wikitext(tr.text, ph.placeholders)
         # Safety: restore any leftover placeholders in case MT preserved tokens
         for token, value in ph.placeholders.items():
