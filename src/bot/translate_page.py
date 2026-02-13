@@ -44,6 +44,7 @@ def _unit_title(page_title: str, unit_key: str, lang: str) -> str:
 
 LINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 FILE_LINK_RE = re.compile(r"\[\[(?:File|Image):[^\]]+\]\]", re.IGNORECASE)
+HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>]*?>")
 EMPTY_P_RE = re.compile(r"<p>\s*(?:<br\s*/?>\s*)+</p>", re.IGNORECASE)
 REDIRECT_RE = re.compile(r"^\s*#redirect\b", re.IGNORECASE)
 UNRESOLVED_PLACEHOLDER_RE = re.compile(r"__PH\d+__|__LINK\d+__")
@@ -363,6 +364,19 @@ def _restore_file_links(source: str, translated: str) -> str:
     if len(source_links) > len(translated_links):
         extra = "\n".join(source_links[len(translated_links):])
         out = f"{extra}\n{out}"
+    return out
+
+
+def _restore_html_tags(source: str, translated: str) -> str:
+    source_tags = HTML_TAG_RE.findall(source)
+    if not source_tags:
+        return translated
+    translated_tags = HTML_TAG_RE.findall(translated)
+    if not translated_tags:
+        return translated
+    out = translated
+    for src, tr in zip(source_tags, translated_tags):
+        out = out.replace(tr, src, 1)
     return out
 
 
@@ -1018,6 +1032,7 @@ def main() -> None:
             if token in restored:
                 restored = restored.replace(token, value)
         restored = _restore_file_links(seg.text, restored)
+        restored = _restore_html_tags(seg.text, restored)
         restored = _strip_heading_list_prefix(restored)
         restored = _normalize_heading_lines(restored)
         restored = _align_list_markers(seg.text, restored)
@@ -1126,6 +1141,7 @@ def main() -> None:
         restored = translated_by_key[key]
         source_text = source_by_key.get(key, "")
         restored = _restore_file_links(source_text, restored)
+        restored = _restore_html_tags(source_text, restored)
         if key == metadata_key:
             restored = _compact_leading_metadata_preamble(restored)
         unit_title = _unit_title(norm_title, key, args.lang)

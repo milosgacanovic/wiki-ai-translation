@@ -6,6 +6,7 @@ from bot.translate_page import (
     _strip_unresolved_placeholders,
     _fix_broken_links,
     _restore_file_links,
+    _restore_html_tags,
     _source_title_for_displaytitle,
     _normalize_leading_status_directives,
 )
@@ -50,6 +51,15 @@ def test_restore_file_links():
     source = "[[File:Arjan bouw.jpg|alt=Arjan Bouw|thumb|Photo: Luna Burger]]"
     translated = "[[File:Arjan Bouw.jpg|alt=Arjan Bou|slika|Fotografija: Luna Burger]]"
     assert _restore_file_links(source, translated) == source
+
+
+def test_restore_html_tags_preserves_class_names():
+    source = '<div class="dr-hero"><div class="dr-hero-inner">Text</div></div>'
+    translated = '<div class="dr-eroe"><div class="dr-eroe-interno">Testo</div></div>'
+    assert (
+        _restore_html_tags(source, translated)
+        == '<div class="dr-hero"><div class="dr-hero-inner">Testo</div></div>'
+    )
 
 
 def test_source_title_for_displaytitle_prefers_first_numeric_segment():
