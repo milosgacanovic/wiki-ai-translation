@@ -52,8 +52,8 @@ def test_restore_file_links():
     assert _restore_file_links(source, translated) == source
 
 
-def test_source_title_for_displaytitle_prefers_segment_1():
-    segments = [Segment(key="1", text="{{DISPLAYTITLE:InnerMotion - The Guidebook - Acknowledgment}}")]
+def test_source_title_for_displaytitle_prefers_first_numeric_segment():
+    segments = [Segment(key="8", text="{{DISPLAYTITLE:InnerMotion - The Guidebook - Acknowledgment}}")]
     assert (
         _source_title_for_displaytitle(
             "Conscious Dance Practices/InnerMotion/The Guidebook/Acknowledgment",

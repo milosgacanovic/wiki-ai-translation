@@ -141,13 +141,12 @@ def _extract_displaytitle(text: str) -> str | None:
 def _source_title_for_displaytitle(
     norm_title: str, wikitext: str, segments: list[Segment]
 ) -> str:
-    # Prefer source DISPLAYTITLE from unit 1, then full source wikitext.
-    for seg in segments:
-        if seg.key == "1":
-            value = _extract_displaytitle(seg.text)
-            if value:
-                return value
-            break
+    # Prefer source DISPLAYTITLE from the first numeric source unit, then full source wikitext.
+    numeric = sorted((int(seg.key), seg) for seg in segments if str(seg.key).isdigit())
+    if numeric:
+        value = _extract_displaytitle(numeric[0][1].text)
+        if value:
+            return value
     value = _extract_displaytitle(wikitext)
     if value:
         return value
@@ -333,10 +332,11 @@ def _write_ai_status_with_retry(
 
 
 def _translation_status_from_unit1(
-    client: MediaWikiClient, norm_title: str, lang: str
+    client: MediaWikiClient, norm_title: str, lang: str, source_lang: str = "en"
 ) -> dict[str, str]:
     try:
-        unit1_title = _unit_title(norm_title, "1", lang)
+        unit_key = _first_source_unit_key(client, norm_title, source_lang)
+        unit1_title = _unit_title(norm_title, unit_key, lang)
         unit1_text, _, _ = client.get_page_wikitext(unit1_title)
         params = _parse_status_template(unit1_text)
     except Exception:
@@ -364,6 +364,17 @@ def _restore_file_links(source: str, translated: str) -> str:
         extra = "\n".join(source_links[len(translated_links):])
         out = f"{extra}\n{out}"
     return out
+
+
+def _first_source_unit_key(client: MediaWikiClient, norm_title: str, source_lang: str) -> str:
+    try:
+        keys = client.list_translation_unit_keys(norm_title, source_lang)
+        numeric = sorted((int(k) for k in keys if str(k).isdigit()))
+        if numeric:
+            return str(numeric[0])
+    except Exception:
+        pass
+    return "1"
 
 
 def _checksum(text: str) -> str:
@@ -750,7 +761,12 @@ def main() -> None:
     status_meta = _translation_status_from_ai_info(ai_info)
     status_meta = {**_translation_status_from_props(props), **status_meta}
     if "dr_translation_status" not in status_meta:
-        status_meta = {**status_meta, **_translation_status_from_unit1(client, norm_title, args.lang)}
+        status_meta = {
+            **status_meta,
+            **_translation_status_from_unit1(
+                client, norm_title, args.lang, source_lang=cfg.source_lang
+            ),
+        }
     status = status_meta.get("dr_translation_status", "").strip().lower() or "machine"
     if status not in ("machine", "reviewed", "outdated"):
         status = "machine"
@@ -764,7 +780,8 @@ def main() -> None:
                 source_rev,
             )
             try:
-                unit1_title = _unit_title(norm_title, "1", args.lang)
+                metadata_key = _first_source_unit_key(client, norm_title, cfg.source_lang)
+                unit1_title = _unit_title(norm_title, metadata_key, args.lang)
                 unit1_text, _, _ = client.get_page_wikitext(unit1_title)
                 updated_unit1 = _upsert_status_template(
                     _remove_disclaimer_tables(unit1_text),
@@ -837,6 +854,7 @@ def main() -> None:
     no_translate_terms = _build_no_translate_terms(termbase_entries)
 
     segments = sorted(segments, key=lambda s: int(s.key))
+    metadata_key = segments[0].key if segments else "1"
     if args.start_key is not None:
         segments = [s for s in segments if int(s.key) >= args.start_key]
     if args.max_keys is not None and args.max_keys > 0:
@@ -925,6 +943,8 @@ def main() -> None:
         title_translation = engine.translate(
             [source_display_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
         )[0].text
+    if title_translation is None:
+        title_translation = source_display_title
     if engine_lang == "sr-Latn":
         title_translation = sr_cyrillic_to_latin(title_translation)
     if termbase_entries:
@@ -979,10 +999,10 @@ def main() -> None:
         # write all current keys even when using checksum cache so new unit
         # titles get populated.
         writable_keys = {seg.key for seg in segments}
-        writable_keys.add("1")
+        writable_keys.add(metadata_key)
     else:
         writable_keys = set(to_translate_keys)
-        writable_keys.add("1")
+        writable_keys.add(metadata_key)
     for seg in segments:
         if seg.key in cached_by_key:
             # Keep cached unit text verbatim in delta mode. This prevents churn where
@@ -1029,7 +1049,7 @@ def main() -> None:
         ordered_keys.append(seg.key)
 
     # Remove any displaytitles from translated segments and add a single one.
-    if ordered_keys and "1" in ordered_keys:
+    if ordered_keys and metadata_key in ordered_keys:
         displaytitle_value = None
         try:
             items = client.get_message_collection(f"page-{norm_title}", args.lang)
@@ -1062,24 +1082,24 @@ def main() -> None:
                         exc,
                     )
             displaytitle = f"{{{{DISPLAYTITLE:{displaytitle_value}}}}}"
-            translated_by_key["1"] = f"{displaytitle}\n{translated_by_key['1']}"
-        translated_by_key["1"] = _strip_empty_paragraphs(translated_by_key["1"])
-        translated_by_key["1"] = _normalize_leading_directives(
-            translated_by_key["1"]
+            translated_by_key[metadata_key] = f"{displaytitle}\n{translated_by_key[metadata_key]}"
+        translated_by_key[metadata_key] = _strip_empty_paragraphs(translated_by_key[metadata_key])
+        translated_by_key[metadata_key] = _normalize_leading_directives(
+            translated_by_key[metadata_key]
         )
-        translated_by_key["1"] = _normalize_leading_status_directives(
-            translated_by_key["1"]
+        translated_by_key[metadata_key] = _normalize_leading_status_directives(
+            translated_by_key[metadata_key]
         )
-        translated_by_key["1"] = _normalize_leading_div(
-            translated_by_key["1"]
+        translated_by_key[metadata_key] = _normalize_leading_div(
+            translated_by_key[metadata_key]
         )
-        translated_by_key["1"] = _collapse_blank_lines(
-            translated_by_key["1"]
+        translated_by_key[metadata_key] = _collapse_blank_lines(
+            translated_by_key[metadata_key]
         )
 
-    if "1" in translated_by_key:
-        translated_by_key["1"] = _upsert_status_template(
-            _remove_disclaimer_tables(translated_by_key["1"]),
+    if metadata_key in translated_by_key:
+        translated_by_key[metadata_key] = _upsert_status_template(
+            _remove_disclaimer_tables(translated_by_key[metadata_key]),
             status="machine",
         )
 
@@ -1106,7 +1126,7 @@ def main() -> None:
         restored = translated_by_key[key]
         source_text = source_by_key.get(key, "")
         restored = _restore_file_links(source_text, restored)
-        if key == "1":
+        if key == metadata_key:
             restored = _compact_leading_metadata_preamble(restored)
         unit_title = _unit_title(norm_title, key, args.lang)
         summary = "Machine translation by bot"
@@ -1150,10 +1170,10 @@ def main() -> None:
     if (
         not args.dry_run
         and ordered_keys
-        and "1" not in ordered_keys
+        and metadata_key not in ordered_keys
     ):
         try:
-            unit1_title = _unit_title(norm_title, "1", args.lang)
+            unit1_title = _unit_title(norm_title, metadata_key, args.lang)
             unit1_text, _, _ = client.get_page_wikitext(unit1_title)
             unit1_updated = _upsert_status_template(
                 _remove_disclaimer_tables(unit1_text),

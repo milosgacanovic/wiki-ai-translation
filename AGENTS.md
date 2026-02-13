@@ -31,7 +31,7 @@ You are Codex, implementing a server-side translation bot for https://wiki.dance
 - Translate only human-readable prose and labels.
 - Prefer consistency over fluency.
 - Enforce termbase substitutions post-translation; flag unresolved terms.
-- Segment `1` metadata formatting is strict: keep leading metadata directives contiguous (no blank/new lines before first content token).
+- First source translation unit metadata formatting is strict: keep leading metadata directives contiguous (no blank/new lines before first content token).
 
 ## Termbase / Style Guide
 - Store per-language termbase + style guide in DB.

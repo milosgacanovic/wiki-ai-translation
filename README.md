@@ -305,7 +305,8 @@ Reviewed workflow note:
 - When a human marks a page as `status=reviewed`, run `wiki-translate-status-sync-reviewed` so
   `source_rev_at_translation` is aligned with the current source revision for reliable outdated detection.
 
-The bot writes the status template into segment `1` and updates source revision metadata.
+The bot writes the status template into the first source translation unit key (not always `1`) and
+updates source revision metadata.
 It writes `ai_translation_*` metadata via API on translated pages:
 - read: `action=aitranslationinfo`
 - write: `action=aitranslationstatus`
@@ -313,7 +314,7 @@ It writes `ai_translation_*` metadata via API on translated pages:
   `source_title`, `source_lang`
 - metadata write failures are warning-only (translation content writes are not rolled back)
 
-Metadata formatting rule (segment `1`):
+Metadata formatting rule (first source translation unit):
 - Keep leading metadata directives contiguous with no blank/new lines before first content token.
 - Example: `{{Translation_status...}}{{DISPLAYTITLE:...}}__NOTOC__<div ...>`
 - This avoids parser-inserted leading `<p><br></p>` artifacts.

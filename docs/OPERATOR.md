@@ -33,7 +33,7 @@ Recommended standard pipeline (most common production mode):
 3. Ingest refreshes translation units (mark-for-translation API).
 4. Jobs are enqueued and translated automatically.
 5. Delta behavior is default: unchanged segments use cache, only changed segments go to MT.
-6. Publish behavior is delta too: unchanged units are not rewritten; unit `1` may still update to refresh translation status/source revision metadata.
+6. Publish behavior is delta too: unchanged units are not rewritten; the first source unit may still update to refresh translation status/source revision metadata.
 7. Cache has two levels: exact page-unit key and content checksum fallback (cross-page reuse).
 
 Important:
@@ -46,7 +46,7 @@ Important:
 - `--plan` is kept as a compatibility alias for `--dry-run` with `--poll-once`.
 
 ## Translation Status
-The bot stores translation state using `{{Translation_status}}` in segment `1`.
+The bot stores translation state using `{{Translation_status}}` in the first source translation unit key (not always `1`).
 In parallel, it writes `ai_translation_*` metadata using custom API endpoints:
 - `action=aitranslationinfo` (read)
 - `action=aitranslationstatus` (write)
@@ -56,7 +56,7 @@ Supported states:
 - `reviewed`: bot skips translation content updates.
 - `outdated`: bot skips translation content updates.
 
-Segment `1` formatting invariant:
+First-source-unit formatting invariant:
 - Leading metadata directives must remain contiguous with no blank/new lines before first content.
 - Target shape: `{{Translation_status...}}{{DISPLAYTITLE:...}}__NOTOC__<div ...>`
 

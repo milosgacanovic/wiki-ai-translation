@@ -100,7 +100,12 @@ def main() -> None:
             status_meta = _translation_status_from_ai_info(ai_info)
             status_meta = {**_translation_status_from_props(props), **status_meta}
             if "dr_translation_status" not in status_meta:
-                status_meta = {**status_meta, **_translation_status_from_unit1(client, norm_title, lang)}
+                status_meta = {
+                    **status_meta,
+                    **_translation_status_from_unit1(
+                        client, norm_title, lang, source_lang=cfg.source_lang
+                    ),
+                }
 
             status = status_meta.get("dr_translation_status", "").strip().lower() or "machine"
             if status not in ("machine", "reviewed", "outdated"):
