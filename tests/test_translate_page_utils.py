@@ -16,6 +16,8 @@ from bot.translate_page import (
     _upsert_status_template,
     _toggle_trailing_newline,
     _normalize_heading_body_spacing,
+    _rewrite_internal_links_to_lang_with_source,
+    _restore_category_namespace,
 )
 from bot.segmenter import Segment
 
@@ -162,3 +164,44 @@ def test_restore_internal_link_targets_preserves_source_target_slug():
 def test_normalize_heading_body_spacing():
     text = "==== [[Page|Heading]] ====\n\n\nBody"
     assert _normalize_heading_body_spacing(text) == "==== [[Page|Heading]] ====\nBody"
+
+
+def test_rewrite_internal_links_keeps_implicit_when_no_display_override():
+    text = "[[Core Values]]"
+    out = _rewrite_internal_links_to_lang_with_source(text, "pt", {"Core Values"})
+    assert out == "[[Core Values/pt]]"
+
+
+def test_rewrite_internal_links_uses_display_override_for_implicit():
+    text = "[[Core Values]]"
+    out = _rewrite_internal_links_to_lang_with_source(
+        text,
+        "pt",
+        {"Core Values"},
+        {"Core Values": "Valores Fundamentais"},
+    )
+    assert out == "[[Core Values/pt|Valores Fundamentais]]"
+
+
+def test_rewrite_internal_links_strips_lang_suffix_from_explicit_display():
+    text = "[[Manifesto/pt|Manifesto/pt]]"
+    out = _rewrite_internal_links_to_lang_with_source(text, "pt", {"Manifesto"})
+    assert out == "[[Manifesto/pt|Manifesto]]"
+
+
+def test_rewrite_internal_links_upgrades_explicit_source_label_to_localized():
+    text = "[[Core Values/pt|Core Values]]"
+    out = _rewrite_internal_links_to_lang_with_source(
+        text,
+        "pt",
+        {"Core Values"},
+        {"Core Values": "Valores Essenciais"},
+    )
+    assert out == "[[Core Values/pt|Valores Essenciais]]"
+
+
+def test_restore_category_namespace():
+    source = "[[Category:Conscious Dance Practices]]\n[[Category:Dance Meditation]]"
+    translated = "[[Categoria:Práticas de Dança Consciente]]\n[[Categoria:Meditação pela Dança]]"
+    out = _restore_category_namespace(source, translated)
+    assert out == "[[Category:Práticas de Dança Consciente]]\n[[Category:Meditação pela Dança]]"

@@ -44,6 +44,7 @@ def _unit_title(page_title: str, unit_key: str, lang: str) -> str:
 
 LINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 FILE_LINK_RE = re.compile(r"\[\[(?:File|Image):[^\]]+\]\]", re.IGNORECASE)
+NS_LINK_RE = re.compile(r"\[\[\s*([^|\]:#]+)\s*:(.*?)\]\]")
 HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>]*?>")
 EMPTY_P_RE = re.compile(r"<p>\s*(?:<br\s*/?>\s*)+</p>", re.IGNORECASE)
 REDIRECT_RE = re.compile(r"^\s*#redirect\b", re.IGNORECASE)
@@ -399,6 +400,30 @@ def _restore_html_tags(source: str, translated: str) -> str:
     return out
 
 
+def _restore_category_namespace(source: str, translated: str) -> str:
+    source_category_count = len(
+        re.findall(r"\[\[\s*Category\s*:", source, flags=re.IGNORECASE)
+    )
+    if source_category_count == 0:
+        return translated
+
+    remaining = source_category_count
+
+    def _repl(match: re.Match) -> str:
+        nonlocal remaining
+        if remaining <= 0:
+            return match.group(0)
+        ns = match.group(1).strip().lower()
+        # Keep non-category namespaces untouched.
+        if ns in {"file", "image", "media", "template"}:
+            return match.group(0)
+        rest = match.group(2)
+        remaining -= 1
+        return f"[[Category:{rest}]]"
+
+    return NS_LINK_RE.sub(_repl, translated)
+
+
 def _restore_internal_link_targets(source: str, translated: str, lang: str) -> str:
     source_links = [m for m in LINK_RE.finditer(source) if _is_safe_internal_link(m.group(1))]
     translated_links = [m for m in LINK_RE.finditer(translated) if _is_safe_internal_link(m.group(1))]
@@ -453,22 +478,63 @@ def _fix_broken_links(text: str, lang: str) -> str:
 
 
 def _rewrite_internal_links_to_lang_with_source(
-    text: str, lang: str, source_targets: set[str]
+    text: str,
+    lang: str,
+    source_targets: set[str],
+    implicit_display_by_target: dict[str, str] | None = None,
 ) -> str:
+    implicit_display_by_target = implicit_display_by_target or {}
+
+    def _trim_lang_suffix(value: str) -> str:
+        suffix = f"/{lang}"
+        if value.endswith(suffix):
+            return value[: -len(suffix)]
+        return value
+
     def _repl(match: re.Match) -> str:
         target = match.group(1)
-        display = match.group(2) or target
+        display_raw = match.group(2)
+        has_explicit_display = display_raw is not None
+        display = display_raw or target
         if not _is_safe_internal_link(target):
             return match.group(0)
         page, anchor = (target.split("#", 1) + [""])[:2]
-        if page.endswith(f"/{lang}") or page not in source_targets:
+        base_page = _trim_lang_suffix(page)
+        if page.endswith(f"/{lang}") or base_page not in source_targets:
             new_target = page
         else:
             new_target = f"{page}/{lang}"
         if anchor:
             new_target = f"{new_target}#{anchor}"
+        if not has_explicit_display:
+            localized = implicit_display_by_target.get(base_page)
+            if localized:
+                return f"[[{new_target}|{localized}]]"
+            return f"[[{new_target}]]"
+
+        localized = implicit_display_by_target.get(base_page)
+        if localized and (display == page or display == base_page or display == target):
+            display = localized
+
+        if display == target or display == new_target:
+            display = _trim_lang_suffix(display)
         return f"[[{new_target}|{display}]]"
     return LINK_RE.sub(_repl, text)
+
+
+def _translated_target_display_title(
+    client: MediaWikiClient, target_page: str, lang: str
+) -> str | None:
+    candidates = _page_display_title_unit_titles(target_page, lang)
+    for candidate in candidates:
+        try:
+            text, _, _ = client.get_page_wikitext(candidate)
+            value = (text or "").strip()
+            if value:
+                return value
+        except Exception:
+            continue
+    return None
 
 
 def _build_no_translate_terms(
@@ -1075,6 +1141,20 @@ def main() -> None:
         for (target, _), tr in zip(link_display_requests.items(), translated_displays):
             link_display_translated[target] = tr.text
 
+    implicit_targets: set[str] = set()
+    for seg in segments:
+        for m in LINK_RE.finditer(seg.text):
+            tgt = m.group(1)
+            disp = m.group(2)
+            if disp is None and _is_safe_internal_link(tgt):
+                page = tgt.split("#", 1)[0]
+                implicit_targets.add(page)
+    implicit_display_by_target: dict[str, str] = {}
+    for target_page in sorted(implicit_targets):
+        translated_display = _translated_target_display_title(client, target_page, args.lang)
+        if translated_display:
+            implicit_display_by_target[target_page] = translated_display
+
     translated_by_key: dict[str, str] = {}
     ordered_keys: list[str] = []
     # Delta default: only changed units are rewritten.
@@ -1132,6 +1212,7 @@ def main() -> None:
                 restored = restored.replace(token, value)
         restored = _restore_file_links(seg.text, restored)
         restored = _restore_html_tags(seg.text, restored)
+        restored = _restore_category_namespace(seg.text, restored)
         restored = _restore_internal_link_targets(seg.text, restored, args.lang)
         restored = _strip_heading_list_prefix(restored)
         restored = _normalize_heading_lines(restored)
@@ -1153,7 +1234,7 @@ def main() -> None:
             restored = LINK_RE.sub(_rewrite_display, restored)
         restored = _fix_broken_links(restored, args.lang)
         restored = _rewrite_internal_links_to_lang_with_source(
-            restored, args.lang, source_targets
+            restored, args.lang, source_targets, implicit_display_by_target
         )
         if termbase_entries:
             restored = _apply_termbase_safe(restored, termbase_entries)
@@ -1243,6 +1324,10 @@ def main() -> None:
         source_text = source_by_key.get(key, "")
         restored = _restore_file_links(source_text, restored)
         restored = _restore_html_tags(source_text, restored)
+        restored = _restore_category_namespace(source_text, restored)
+        restored = _rewrite_internal_links_to_lang_with_source(
+            restored, args.lang, source_targets, implicit_display_by_target
+        )
         restored = _restore_internal_link_targets(source_text, restored, args.lang)
         restored = _normalize_heading_body_spacing(restored)
         if key == metadata_key:
