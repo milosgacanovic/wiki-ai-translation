@@ -35,6 +35,7 @@ Recommended standard pipeline (most common production mode):
 5. Delta behavior is default: unchanged segments use cache, only changed segments go to MT.
 6. Publish behavior is delta too: unchanged units are not rewritten; the first source unit may still update to refresh translation status/source revision metadata.
 7. Cache has two levels: exact page-unit key and content checksum fallback (cross-page reuse).
+8. Fuzzy units are auto-refreshed: if a unit is marked `fuzzy`, the bot forces a harmless unit edit so Translate clears the `needs update` state.
 
 Important:
 - Do not rely on manual direct translation commands for normal operation.
@@ -44,6 +45,8 @@ Important:
 - For delta preview without mutating queue/cursor:
   `wiki-translate-runner --poll-once --dry-run`
 - `--plan` is kept as a compatibility alias for `--dry-run` with `--poll-once`.
+- `--poll-once` paginates recent changes (50-per-request API pages) and processes all available batches in one run.
+- Use `--poll-limit N` to cap how many recentchanges entries are processed in one poll cycle.
 
 ## Translation Status
 The bot stores translation state using `{{Translation_status}}` in the first source translation unit key (not always `1`).

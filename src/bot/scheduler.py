@@ -19,11 +19,17 @@ class Change:
     timestamp: str
 
 
-def poll_recent_changes(client: MediaWikiClient, since: str | None) -> tuple[list[Change], str | None]:
-    changes = []
-    data = client._request(
-        "GET",
-        {
+def poll_recent_changes(
+    client: MediaWikiClient,
+    since: str | None,
+    limit: int | None = None,
+) -> tuple[list[Change], str | None]:
+    changes: list[Change] = []
+    rccontinue: str | None = None
+    while True:
+        if limit is not None and limit > 0 and len(changes) >= limit:
+            break
+        params = {
             "action": "query",
             "list": "recentchanges",
             "rcprop": "title|ids|timestamp",
@@ -32,10 +38,19 @@ def poll_recent_changes(client: MediaWikiClient, since: str | None) -> tuple[lis
             "rclimit": 50,
             "rcdir": "newer",
             **({"rcstart": since} if since else {}),
-        },
-    )
-    for rc in data.get("query", {}).get("recentchanges", []):
-        changes.append(Change(title=rc["title"], rev_id=int(rc["revid"]), timestamp=rc["timestamp"]))
+            **({"rccontinue": rccontinue, "continue": "-||"} if rccontinue else {}),
+        }
+        data = client._request("GET", params)
+        for rc in data.get("query", {}).get("recentchanges", []):
+            changes.append(Change(title=rc["title"], rev_id=int(rc["revid"]), timestamp=rc["timestamp"]))
+            if limit is not None and limit > 0 and len(changes) >= limit:
+                break
+        if limit is not None and limit > 0 and len(changes) >= limit:
+            break
+        cont = data.get("continue", {})
+        rccontinue = cont.get("rccontinue")
+        if not rccontinue:
+            break
     # use last timestamp as new cursor
     new_since = changes[-1].timestamp if changes else since
     return changes, new_since

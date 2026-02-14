@@ -27,6 +27,8 @@ cd /opt/wiki-ai-translation && docker compose -f /opt/wiki-ai-translation/docker
 ### Common Actions
 - `wiki-translate-runner --poll-once`
   - Delta pipeline once: detect source changes, enqueue, translate, approve, write run report.
+- `wiki-translate-runner --poll-once --poll-limit 20`
+  - Delta pipeline once, capped to 20 recentchanges entries for this cycle.
 - `wiki-translate-runner --poll-once --dry-run`
   - Preview only: prints what would be queued, no queue/cursor/process writes.
 - `wiki-translate-runner --poll-once --plan`
@@ -62,6 +64,7 @@ cd /opt/wiki-ai-translation && docker compose -f /opt/wiki-ai-translation/docker
 - `--rebuild-only`: Use cache only, no MT calls.
 - `--poll-once`: Process recentchanges one cycle.
 - `--poll`: Run continuous recentchanges poll loop.
+- `--poll-limit <int>`: Max recentchanges entries processed in one poll cycle.
 - `--sync-reviewed-status`: Run reviewed-status metadata sync utility.
 
 ### Guardrails

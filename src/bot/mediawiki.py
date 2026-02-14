@@ -271,7 +271,9 @@ class MediaWikiClient:
                 break
         return sorted(set(titles))
 
-    def get_message_collection(self, group_id: str, lang: str) -> list[dict[str, Any]]:
+    def get_message_collection(
+        self, group_id: str, lang: str, include_properties: bool = False
+    ) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         mcoffset = None
         while True:
@@ -281,7 +283,9 @@ class MediaWikiClient:
                 "mcgroup": group_id,
                 "mclanguage": lang,
                 "mclimit": 5000,
-                "mcprop": "definition|translation",
+                "mcprop": "definition|translation|properties"
+                if include_properties
+                else "definition|translation",
             }
             if mcoffset:
                 params["mcoffset"] = mcoffset

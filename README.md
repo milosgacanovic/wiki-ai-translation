@@ -220,6 +220,9 @@ Process recent changes once (for cron jobs):
 wiki-translate-runner --poll-once
 ```
 
+`--poll-once` paginates MediaWiki recent changes until all available batches are processed in that run.
+Use `--poll-limit N` to cap how many recent changes are processed in one run.
+
 Delta dry-run preview (no queue/process/cursor changes):
 
 ```bash
@@ -250,6 +253,8 @@ Default production flow (recommended):
   and enqueues translation jobs automatically.
 - Translation then runs in delta mode by default (cache enabled): unchanged segments are reused from
   cache, changed segments are sent to MT.
+- If Translate marks a unit as fuzzy after source edits, the bot refreshes that unit to clear
+  `needs update` status.
 - Avoid direct `translate_page` calls for normal automation; use them only for manual/forced runs.
 
 ## Ingestion

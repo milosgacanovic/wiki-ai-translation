@@ -170,6 +170,12 @@ def main() -> None:
     parser.add_argument("--poll-once", action="store_true", help="process recentchanges once and exit")
     parser.add_argument("--poll", action="store_true", help="run recentchanges poller")
     parser.add_argument(
+        "--poll-limit",
+        type=int,
+        default=None,
+        help="max recentchanges entries to process in one poll cycle",
+    )
+    parser.add_argument(
         "--sync-reviewed-status",
         action="store_true",
         help="sync source_rev_at_translation for reviewed pages",
@@ -319,7 +325,7 @@ def main() -> None:
         if args.dry_run:
             with get_conn(cfg.pg_dsn) as conn:
                 since = get_ingest_cursor(conn, "recentchanges")
-            changes, _new_since = poll_recent_changes(client, since)
+            changes, _new_since = poll_recent_changes(client, since, limit=args.poll_limit)
             plan_pages: set[str] = set()
             with get_conn(cfg.pg_dsn) as conn:
                 def _record(
@@ -352,7 +358,7 @@ def main() -> None:
         with get_conn(cfg.pg_dsn) as conn:
             run_id = start_run(conn, "poll-once", cfg)
             since = get_ingest_cursor(conn, "recentchanges")
-        changes, new_since = poll_recent_changes(client, since)
+        changes, new_since = poll_recent_changes(client, since, limit=args.poll_limit)
         if changes:
             with get_conn(cfg.pg_dsn) as conn:
                 for change in changes:

@@ -399,6 +399,31 @@ def _restore_html_tags(source: str, translated: str) -> str:
     return out
 
 
+def _restore_internal_link_targets(source: str, translated: str, lang: str) -> str:
+    source_links = [m for m in LINK_RE.finditer(source) if _is_safe_internal_link(m.group(1))]
+    translated_links = [m for m in LINK_RE.finditer(translated) if _is_safe_internal_link(m.group(1))]
+    if not source_links or not translated_links:
+        return translated
+    out = translated
+    for src, tr in zip(source_links, translated_links):
+        src_target = src.group(1)
+        src_page, src_anchor = (src_target.split("#", 1) + [""])[:2]
+        if src_page.endswith(f"/{lang}"):
+            new_page = src_page
+        else:
+            new_page = f"{src_page}/{lang}"
+        new_target = f"{new_page}#{src_anchor}" if src_anchor else new_page
+        tr_display = tr.group(2)
+        replacement = f"[[{new_target}|{tr_display}]]" if tr_display is not None else f"[[{new_target}]]"
+        out = out.replace(tr.group(0), replacement, 1)
+    return out
+
+
+def _normalize_heading_body_spacing(text: str) -> str:
+    # Keep only one newline between a heading line and the following body line.
+    return re.sub(r"(={2,6}[^\n]*={2,6})\n{2,}", r"\1\n", text)
+
+
 def _first_source_unit_key(client: MediaWikiClient, norm_title: str, source_lang: str) -> str:
     try:
         keys = client.list_translation_unit_keys(norm_title, source_lang)
@@ -412,6 +437,12 @@ def _first_source_unit_key(client: MediaWikiClient, norm_title: str, source_lang
 
 def _checksum(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _toggle_trailing_newline(text: str) -> str:
+    if text.endswith("\n"):
+        return text.rstrip("\n")
+    return text + "\n"
 
 
 def _fix_broken_links(text: str, lang: str) -> str:
@@ -897,6 +928,21 @@ def main() -> None:
     cached_by_key: dict[str, str] = {}
     cached_source_by_key: dict[str, str] = {}
     existing_checksums: dict[str, str] = {}
+    fuzzy_keys: set[str] = set()
+    try:
+        lang_items = client.get_message_collection(
+            f"page-{norm_title}", args.lang, include_properties=True
+        )
+        for item in lang_items:
+            key = str(item.get("key", ""))
+            unit_key = key.split("/")[-1]
+            if not unit_key.isdigit():
+                continue
+            props = item.get("properties") or {}
+            if str(props.get("status", "")).strip().lower() == "fuzzy":
+                fuzzy_keys.add(unit_key)
+    except Exception:
+        fuzzy_keys = set()
     disable_cache = False
     if cfg.pg_dsn and not args.no_cache:
         try:
@@ -1044,6 +1090,7 @@ def main() -> None:
     else:
         writable_keys = set(to_translate_keys)
         writable_keys.add(metadata_key)
+    writable_keys.update(fuzzy_keys)
     for seg in segments:
         if seg.key in cached_by_key:
             # Keep cached unit text verbatim in delta mode. This prevents churn where
@@ -1069,8 +1116,10 @@ def main() -> None:
                 restored = restored.replace(token, value)
         restored = _restore_file_links(seg.text, restored)
         restored = _restore_html_tags(seg.text, restored)
+        restored = _restore_internal_link_targets(seg.text, restored, args.lang)
         restored = _strip_heading_list_prefix(restored)
         restored = _normalize_heading_lines(restored)
+        restored = _normalize_heading_body_spacing(restored)
         restored = _align_list_markers(seg.text, restored)
         if engine_lang == "sr-Latn":
             restored = sr_cyrillic_to_latin(restored)
@@ -1178,6 +1227,8 @@ def main() -> None:
         source_text = source_by_key.get(key, "")
         restored = _restore_file_links(source_text, restored)
         restored = _restore_html_tags(source_text, restored)
+        restored = _restore_internal_link_targets(source_text, restored, args.lang)
+        restored = _normalize_heading_body_spacing(restored)
         if key == metadata_key:
             restored = _compact_leading_metadata_preamble(restored)
         unit_title = _unit_title(norm_title, key, args.lang)
@@ -1190,8 +1241,12 @@ def main() -> None:
         try:
             current_text, _, _ = client.get_page_wikitext(unit_title)
             if current_text.strip() == restored.strip():
-                logging.getLogger("translate").info("skip unchanged %s", unit_title)
-                continue
+                if key in fuzzy_keys:
+                    # Force a harmless edit to clear fuzzy state for this unit.
+                    restored = _toggle_trailing_newline(current_text)
+                else:
+                    logging.getLogger("translate").info("skip unchanged %s", unit_title)
+                    continue
         except MediaWikiError:
             # Unit might not exist yet; continue with edit.
             pass

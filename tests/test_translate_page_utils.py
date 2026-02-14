@@ -9,10 +9,13 @@ from bot.translate_page import (
     _fix_broken_links,
     _restore_file_links,
     _restore_html_tags,
+    _restore_internal_link_targets,
     _source_title_for_displaytitle,
     _normalize_leading_status_directives,
     _compact_leading_metadata_preamble,
     _upsert_status_template,
+    _toggle_trailing_newline,
+    _normalize_heading_body_spacing,
 )
 from bot.segmenter import Segment
 
@@ -140,3 +143,22 @@ def test_upsert_status_template_compacts_displaytitle_notoc_gap():
     assert out.startswith(
         "{{Translation_status|status=machine}}{{DISPLAYTITLE:InnerMotion - The Guidebook}}__NOTOC__"
     )
+
+
+def test_toggle_trailing_newline():
+    assert _toggle_trailing_newline("A") == "A\n"
+    assert _toggle_trailing_newline("A\n") == "A"
+
+
+def test_restore_internal_link_targets_preserves_source_target_slug():
+    source = "[[Future Directions and Vision|Future Directions and Vision]]"
+    translated = "[[Future Directions & Vision/sr|Budući pravci i vizija]]"
+    assert (
+        _restore_internal_link_targets(source, translated, "sr")
+        == "[[Future Directions and Vision/sr|Budući pravci i vizija]]"
+    )
+
+
+def test_normalize_heading_body_spacing():
+    text = "==== [[Page|Heading]] ====\n\n\nBody"
+    assert _normalize_heading_body_spacing(text) == "==== [[Page|Heading]] ====\nBody"
