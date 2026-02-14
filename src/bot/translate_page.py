@@ -1156,11 +1156,40 @@ def main() -> None:
             if disp is None and _is_safe_internal_link(tgt):
                 page = tgt.split("#", 1)[0]
                 implicit_targets.add(page)
-    implicit_display_by_target: dict[str, str] = {}
-    for target_page in sorted(implicit_targets):
+    # Localized display titles for linked pages. We use this for:
+    # - implicit links [[Page]]
+    # - explicit links where display still equals the source title [[Page|Page]]
+    localized_display_by_target: dict[str, str] = {}
+    display_targets = set(implicit_targets) | set(source_targets)
+    for target_page in sorted(display_targets):
         translated_display = _translated_target_display_title(client, target_page, args.lang)
         if translated_display:
-            implicit_display_by_target[target_page] = translated_display
+            localized_display_by_target[target_page] = translated_display
+    # Fallback for newly added languages: if target page translation does not
+    # exist yet, translate the link label itself so users do not see English UI labels.
+    missing_targets = [t for t in sorted(display_targets) if t not in localized_display_by_target]
+    if missing_targets and engine is not None:
+        fallback_labels: list[str] = []
+        fallback_targets: list[str] = []
+        for target_page in missing_targets:
+            label = target_page.rsplit("/", 1)[-1].replace("_", " ").strip()
+            if not label:
+                continue
+            if not _should_translate_display(label, no_translate_terms):
+                continue
+            fallback_targets.append(target_page)
+            fallback_labels.append(label)
+        if fallback_labels:
+            fallback_translated = engine.translate(
+                fallback_labels, cfg.source_lang, engine_lang, glossary_id=glossary_id
+            )
+            for target_page, tr in zip(fallback_targets, fallback_translated):
+                value = tr.text
+                if engine_lang == "sr-Latn":
+                    value = sr_cyrillic_to_latin(value)
+                if termbase_entries:
+                    value = _apply_termbase(value, termbase_entries)
+                localized_display_by_target[target_page] = value
 
     translated_by_key: dict[str, str] = {}
     ordered_keys: list[str] = []
@@ -1241,7 +1270,7 @@ def main() -> None:
             restored = LINK_RE.sub(_rewrite_display, restored)
         restored = _fix_broken_links(restored, args.lang)
         restored = _rewrite_internal_links_to_lang_with_source(
-            restored, args.lang, source_targets, implicit_display_by_target
+            restored, args.lang, source_targets, localized_display_by_target
         )
         if termbase_entries:
             restored = _apply_termbase_safe(restored, termbase_entries)
@@ -1333,7 +1362,7 @@ def main() -> None:
         restored = _restore_html_tags(source_text, restored)
         restored = _restore_category_namespace(source_text, restored)
         restored = _rewrite_internal_links_to_lang_with_source(
-            restored, args.lang, source_targets, implicit_display_by_target
+            restored, args.lang, source_targets, localized_display_by_target
         )
         restored = _restore_internal_link_targets(source_text, restored, args.lang)
         restored = _normalize_heading_body_spacing(restored)

@@ -19,7 +19,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/he|יתרונות המחול המודע
 ** Scientific_Research_and_Evidence/he|מחקר מדעי וראיות
 ** Historical_and_Cultural_Context/he|הקשר היסטורי ותרבותי
-** Established_Conscious_Dance_Practices/he|פרקטיקות מבוססות של מחול מודע
+** Conscious_Dance_Practices/he|פרקטיקות מבוססות של מחול מודע
 ** Community_and_Global_Collaboration/he|קהילה ושיתוף פעולה גלובלי
 ** Future_Directions_and_Vision/he|כיוונים עתידיים וחזון
 ** Appendices/he|נספחים
@@ -37,7 +37,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/da|Fordele ved bevidst dans
 ** Scientific_Research_and_Evidence/da|Videnskabelig forskning og evidens
 ** Historical_and_Cultural_Context/da|Historisk og kulturel kontekst
-** Established_Conscious_Dance_Practices/da|Etablerede praksisser for bevidst dans
+** Conscious_Dance_Practices/da|Etablerede praksisser for bevidst dans
 ** Community_and_Global_Collaboration/da|Fællesskab og globalt samarbejde
 ** Future_Directions_and_Vision/da|Fremtidige retninger og vision
 ** Appendices/da|Bilag
@@ -55,7 +55,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/pt|Benefícios da dança consciente
 ** Scientific_Research_and_Evidence/pt|Pesquisa científica e evidências
 ** Historical_and_Cultural_Context/pt|Contexto histórico e cultural
-** Established_Conscious_Dance_Practices/pt|Práticas estabelecidas de dança consciente
+** Conscious_Dance_Practices/pt|Práticas estabelecidas de dança consciente
 ** Community_and_Global_Collaboration/pt|Comunidade e colaboração global
 ** Future_Directions_and_Vision/pt|Direções futuras e visão
 ** Appendices/pt|Apêndices
@@ -73,7 +73,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/pl|Korzyści tańca świadomego
 ** Scientific_Research_and_Evidence/pl|Badania naukowe i dowody
 ** Historical_and_Cultural_Context/pl|Kontekst historyczny i kulturowy
-** Established_Conscious_Dance_Practices/pl|Ugruntowane praktyki tańca świadomego
+** Conscious_Dance_Practices/pl|Ugruntowane praktyki tańca świadomego
 ** Community_and_Global_Collaboration/pl|Społeczność i globalna współpraca
 ** Future_Directions_and_Vision/pl|Przyszłe kierunki i wizja
 ** Appendices/pl|Aneksy
@@ -91,7 +91,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/el|Οφέλη του συνειδητού χορού
 ** Scientific_Research_and_Evidence/el|Επιστημονική έρευνα και τεκμήρια
 ** Historical_and_Cultural_Context/el|Ιστορικό και πολιτισμικό πλαίσιο
-** Established_Conscious_Dance_Practices/el|Καθιερωμένες πρακτικές συνειδητού χορού
+** Conscious_Dance_Practices/el|Καθιερωμένες πρακτικές συνειδητού χορού
 ** Community_and_Global_Collaboration/el|Κοινότητα και παγκόσμια συνεργασία
 ** Future_Directions_and_Vision/el|Μελλοντικές κατευθύνσεις και όραμα
 ** Appendices/el|Παραρτήματα
@@ -109,7 +109,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/hu|A tudatos tánc előnyei
 ** Scientific_Research_and_Evidence/hu|Tudományos kutatás és bizonyítékok
 ** Historical_and_Cultural_Context/hu|Történelmi és kulturális kontextus
-** Established_Conscious_Dance_Practices/hu|Bevált tudatos tánc gyakorlatok
+** Conscious_Dance_Practices/hu|Bevált tudatos tánc gyakorlatok
 ** Community_and_Global_Collaboration/hu|Közösség és globális együttműködés
 ** Future_Directions_and_Vision/hu|Jövőbeli irányok és vízió
 ** Appendices/hu|Függelékek
@@ -127,7 +127,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/sv|Fördelar med medveten dans
 ** Scientific_Research_and_Evidence/sv|Vetenskaplig forskning och evidens
 ** Historical_and_Cultural_Context/sv|Historisk och kulturell kontext
-** Established_Conscious_Dance_Practices/sv|Etablerade praktiker för medveten dans
+** Conscious_Dance_Practices/sv|Etablerade praktiker för medveten dans
 ** Community_and_Global_Collaboration/sv|Gemenskap och globalt samarbete
 ** Future_Directions_and_Vision/sv|Framtida riktningar och vision
 ** Appendices/sv|Bilagor
@@ -145,7 +145,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/fi|Tietoisen tanssin hyödyt
 ** Scientific_Research_and_Evidence/fi|Tieteellinen tutkimus ja näyttö
 ** Historical_and_Cultural_Context/fi|Historiallinen ja kulttuurinen konteksti
-** Established_Conscious_Dance_Practices/fi|Vakiintuneet tietoisen tanssin käytännöt
+** Conscious_Dance_Practices/fi|Vakiintuneet tietoisen tanssin käytännöt
 ** Community_and_Global_Collaboration/fi|Yhteisö ja globaali yhteistyö
 ** Future_Directions_and_Vision/fi|Tulevat suuntaukset ja visio
 ** Appendices/fi|Liitteet
@@ -163,7 +163,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/sk|Prínosy vedomého tanca
 ** Scientific_Research_and_Evidence/sk|Vedecký výskum a dôkazy
 ** Historical_and_Cultural_Context/sk|Historický a kultúrny kontext
-** Established_Conscious_Dance_Practices/sk|Zavedené praktiky vedomého tanca
+** Conscious_Dance_Practices/sk|Zavedené praktiky vedomého tanca
 ** Community_and_Global_Collaboration/sk|Komunita a globálna spolupráca
 ** Future_Directions_and_Vision/sk|Budúce smerovania a vízia
 ** Appendices/sk|Prílohy
@@ -181,7 +181,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/hr|Prednosti svjesnog plesa
 ** Scientific_Research_and_Evidence/hr|Znanstvena istraživanja i dokazi
 ** Historical_and_Cultural_Context/hr|Povijesni i kulturni kontekst
-** Established_Conscious_Dance_Practices/hr|Utemeljene prakse svjesnog plesa
+** Conscious_Dance_Practices/hr|Utemeljene prakse svjesnog plesa
 ** Community_and_Global_Collaboration/hr|Zajednica i globalna suradnja
 ** Future_Directions_and_Vision/hr|Budući smjerovi i vizija
 ** Appendices/hr|Dodaci
@@ -199,7 +199,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/id|Manfaat tari sadar
 ** Scientific_Research_and_Evidence/id|Riset ilmiah dan bukti
 ** Historical_and_Cultural_Context/id|Konteks sejarah dan budaya
-** Established_Conscious_Dance_Practices/id|Praktik tari sadar yang mapan
+** Conscious_Dance_Practices/id|Praktik tari sadar yang mapan
 ** Community_and_Global_Collaboration/id|Komunitas dan kolaborasi global
 ** Future_Directions_and_Vision/id|Arah masa depan dan visi
 ** Appendices/id|Lampiran
@@ -217,7 +217,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/ar|فوائد الرقص الواعي
 ** Scientific_Research_and_Evidence/ar|البحث العلمي والأدلة
 ** Historical_and_Cultural_Context/ar|السياق التاريخي والثقافي
-** Established_Conscious_Dance_Practices/ar|ممارسات الرقص الواعي المعتمدة
+** Conscious_Dance_Practices/ar|ممارسات الرقص الواعي المعتمدة
 ** Community_and_Global_Collaboration/ar|المجتمع والتعاون العالمي
 ** Future_Directions_and_Vision/ar|التوجهات المستقبلية والرؤية
 ** Appendices/ar|الملاحق
@@ -235,7 +235,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/hi|सचेत नृत्य के लाभ
 ** Scientific_Research_and_Evidence/hi|वैज्ञानिक अनुसंधान और प्रमाण
 ** Historical_and_Cultural_Context/hi|ऐतिहासिक और सांस्कृतिक संदर्भ
-** Established_Conscious_Dance_Practices/hi|स्थापित सचेत नृत्य अभ्यास
+** Conscious_Dance_Practices/hi|स्थापित सचेत नृत्य अभ्यास
 ** Community_and_Global_Collaboration/hi|समुदाय और वैश्विक सहयोग
 ** Future_Directions_and_Vision/hi|भविष्य की दिशाएँ और दृष्टि
 ** Appendices/hi|परिशिष्ट
@@ -253,7 +253,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/no|Fordeler med bevisst dans
 ** Scientific_Research_and_Evidence/no|Vitenskapelig forskning og evidens
 ** Historical_and_Cultural_Context/no|Historisk og kulturell kontekst
-** Established_Conscious_Dance_Practices/no|Etablerte praksiser for bevisst dans
+** Conscious_Dance_Practices/no|Etablerte praksiser for bevisst dans
 ** Community_and_Global_Collaboration/no|Fellesskap og globalt samarbeid
 ** Future_Directions_and_Vision/no|Fremtidige retninger og visjon
 ** Appendices/no|Vedlegg
@@ -271,7 +271,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/cs|Přínosy vědomého tance
 ** Scientific_Research_and_Evidence/cs|Vědecký výzkum a důkazy
 ** Historical_and_Cultural_Context/cs|Historický a kulturní kontext
-** Established_Conscious_Dance_Practices/cs|Zavedené praktiky vědomého tance
+** Conscious_Dance_Practices/cs|Zavedené praktiky vědomého tance
 ** Community_and_Global_Collaboration/cs|Komunita a globální spolupráce
 ** Future_Directions_and_Vision/cs|Budoucí směry a vize
 ** Appendices/cs|Přílohy
@@ -289,7 +289,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/ko|의식적인 춤의 이점
 ** Scientific_Research_and_Evidence/ko|과학적 연구와 근거
 ** Historical_and_Cultural_Context/ko|역사적·문화적 맥락
-** Established_Conscious_Dance_Practices/ko|확립된 의식적 춤 실천
+** Conscious_Dance_Practices/ko|확립된 의식적 춤 실천
 ** Community_and_Global_Collaboration/ko|커뮤니티와 글로벌 협력
 ** Future_Directions_and_Vision/ko|미래 방향과 비전
 ** Appendices/ko|부록
@@ -307,7 +307,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/ja|コンシャス・ダンスの利点
 ** Scientific_Research_and_Evidence/ja|科学的研究と証拠
 ** Historical_and_Cultural_Context/ja|歴史的・文化的背景
-** Established_Conscious_Dance_Practices/ja|確立されたコンシャス・ダンスの実践
+** Conscious_Dance_Practices/ja|確立されたコンシャス・ダンスの実践
 ** Community_and_Global_Collaboration/ja|コミュニティとグローバルな協働
 ** Future_Directions_and_Vision/ja|将来の方向性とビジョン
 ** Appendices/ja|付録
@@ -325,7 +325,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/ka|ცნობიერი ცეკვის სარგებელი
 ** Scientific_Research_and_Evidence/ka|სამეცნიერო კვლევა და მტკიცებულებები
 ** Historical_and_Cultural_Context/ka|ისტორიული და კულტურული კონტექსტი
-** Established_Conscious_Dance_Practices/ka|დამკვიდრებული ცნობიერი ცეკვის პრაქტიკები
+** Conscious_Dance_Practices/ka|დამკვიდრებული ცნობიერი ცეკვის პრაქტიკები
 ** Community_and_Global_Collaboration/ka|საზოგადოება და გლობალური თანამშრომლობა
 ** Future_Directions_and_Vision/ka|მომავალი მიმართულებები და ხედვა
 ** Appendices/ka|დანართები
@@ -343,7 +343,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/ro|Beneficiile dansului conștient
 ** Scientific_Research_and_Evidence/ro|Cercetare științifică și dovezi
 ** Historical_and_Cultural_Context/ro|Context istoric și cultural
-** Established_Conscious_Dance_Practices/ro|Practici consacrate de dans conștient
+** Conscious_Dance_Practices/ro|Practici consacrate de dans conștient
 ** Community_and_Global_Collaboration/ro|Comunitate și colaborare globală
 ** Future_Directions_and_Vision/ro|Direcții viitoare și viziune
 ** Appendices/ro|Anexe
@@ -361,7 +361,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/sl|Prednosti zavestnega plesa
 ** Scientific_Research_and_Evidence/sl|Znanstvene raziskave in dokazi
 ** Historical_and_Cultural_Context/sl|Zgodovinski in kulturni kontekst
-** Established_Conscious_Dance_Practices/sl|Uveljavljene prakse zavestnega plesa
+** Conscious_Dance_Practices/sl|Uveljavljene prakse zavestnega plesa
 ** Community_and_Global_Collaboration/sl|Skupnost in globalno sodelovanje
 ** Future_Directions_and_Vision/sl|Prihodnje smeri in vizija
 ** Appendices/sl|Dodatki
@@ -379,7 +379,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/lb|Virdeeler vum bewosste Danz
 ** Scientific_Research_and_Evidence/lb|Wëssenschaftlech Fuerschung an Evidenz
 ** Historical_and_Cultural_Context/lb|Historeschen a kulturelle Kontext
-** Established_Conscious_Dance_Practices/lb|Etabléiert Praxis vum bewosste Danz
+** Conscious_Dance_Practices/lb|Etabléiert Praxis vum bewosste Danz
 ** Community_and_Global_Collaboration/lb|Gemeinschaft a global Zesummenaarbecht
 ** Future_Directions_and_Vision/lb|Zukünfteg Richtungen a Visioun
 ** Appendices/lb|Annexen
@@ -397,7 +397,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/th|ประโยชน์ของการเต้นอย่างมีสติ
 ** Scientific_Research_and_Evidence/th|งานวิจัยทางวิทยาศาสตร์และหลักฐาน
 ** Historical_and_Cultural_Context/th|บริบททางประวัติศาสตร์และวัฒนธรรม
-** Established_Conscious_Dance_Practices/th|แนวปฏิบัติการเต้นอย่างมีสติที่ได้รับการยอมรับ
+** Conscious_Dance_Practices/th|แนวปฏิบัติการเต้นอย่างมีสติที่ได้รับการยอมรับ
 ** Community_and_Global_Collaboration/th|ชุมชนและความร่วมมือระดับโลก
 ** Future_Directions_and_Vision/th|ทิศทางในอนาคตและวิสัยทัศน์
 ** Appendices/th|ภาคผนวก
@@ -415,7 +415,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/is|Ávinningur meðvitaðs dans
 ** Scientific_Research_and_Evidence/is|Vísindarannsóknir og gögn
 ** Historical_and_Cultural_Context/is|Sögulegt og menningarlegt samhengi
-** Established_Conscious_Dance_Practices/is|Rótgrónar aðferðir meðvitaðs dans
+** Conscious_Dance_Practices/is|Rótgrónar aðferðir meðvitaðs dans
 ** Community_and_Global_Collaboration/is|Samfélag og alþjóðlegt samstarf
 ** Future_Directions_and_Vision/is|Framtíðarstefnur og sýn
 ** Appendices/is|Viðaukar
@@ -433,7 +433,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/vi|Lợi ích của khiêu vũ có ý thức
 ** Scientific_Research_and_Evidence/vi|Nghiên cứu khoa học và bằng chứng
 ** Historical_and_Cultural_Context/vi|Bối cảnh lịch sử và văn hóa
-** Established_Conscious_Dance_Practices/vi|Thực hành khiêu vũ có ý thức đã được thiết lập
+** Conscious_Dance_Practices/vi|Thực hành khiêu vũ có ý thức đã được thiết lập
 ** Community_and_Global_Collaboration/vi|Cộng đồng và hợp tác toàn cầu
 ** Future_Directions_and_Vision/vi|Định hướng tương lai và tầm nhìn
 ** Appendices/vi|Phụ lục
@@ -451,7 +451,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/zu|Izinzuzo zokudansa okuqaphelayo
 ** Scientific_Research_and_Evidence/zu|Ucwaningo lwesayensi nobufakazi
 ** Historical_and_Cultural_Context/zu|Umlando nomongo wamasiko
-** Established_Conscious_Dance_Practices/zu|Izindlela ezimisiwe zokudansa okuqaphelayo
+** Conscious_Dance_Practices/zu|Izindlela ezimisiwe zokudansa okuqaphelayo
 ** Community_and_Global_Collaboration/zu|Umphakathi nokubambisana komhlaba
 ** Future_Directions_and_Vision/zu|Izindlela zesikhathi esizayo nombono
 ** Appendices/zu|Izinamathiselo
@@ -469,7 +469,7 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Benefits_of_Conscious_Dance/zh|意识舞蹈的益处
 ** Scientific_Research_and_Evidence/zh|科学研究与证据
 ** Historical_and_Cultural_Context/zh|历史与文化背景
-** Established_Conscious_Dance_Practices/zh|已建立的意识舞蹈实践
+** Conscious_Dance_Practices/zh|已建立的意识舞蹈实践
 ** Community_and_Global_Collaboration/zh|社区与全球协作
 ** Future_Directions_and_Vision/zh|未来方向与愿景
 ** Appendices/zh|附录
