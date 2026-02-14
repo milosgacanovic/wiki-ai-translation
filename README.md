@@ -323,6 +323,23 @@ wiki-translate-runner --ingest-title "Main_Page"
 
 Backfill is resumable using a stored cursor in Postgres (`ingest_state`).
 
+## Editing Source Safely
+When editing English source pages wrapped in `<translate>...</translate>`:
+
+1. Edit only inside the `<translate>` block.
+2. Do not manually edit `<!--T:n-->` markers.
+3. Keep wikitext structure valid in each unit:
+   - headings `== ... ==`
+   - list markers `*`, `#`
+   - refs `<ref ...>...</ref>` and `<references />`
+4. If you add content near the end (for example before References), re-marking may split one unit into two new units.
+5. After such structural changes, run translation once and spot-check the changed unit in a few languages.
+6. For a bad unit, force only that unit:
+   - `python -m bot.translate_page --title \"...\" --lang <code> --start-key <n> --max-keys 1 --no-cache --auto-approve`
+
+Important cache behavior:
+- If re-marking changes unit keys (split/merge/reorder), the bot now bypasses DB cache for that page in that run to avoid stale-context reuse.
+
 ## Custom Translate API Extension
 Some MediaWiki installs do not expose a write API for “Mark this page for translation.” We use a
 small companion extension to expose `action=markfortranslation` so the bot can keep an API-only

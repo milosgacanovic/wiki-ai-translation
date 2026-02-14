@@ -1028,12 +1028,16 @@ def main() -> None:
     for seg in segments:
         checksum = _checksum(seg.text)
         segment_checksums[seg.key] = checksum
-        if not args.no_cache and cfg.pg_dsn:
+        if disable_cache:
+            # Unit map changed after re-marking (keys added/removed/split/merged).
+            # Skip checksum cache for this run to avoid reusing stale context.
+            pass
+        elif not args.no_cache and cfg.pg_dsn:
             try:
                 with get_conn(cfg.pg_dsn) as conn:
                     cached = None
                     # L1: exact page/key cache hit when unit map is stable.
-                    if not disable_cache and existing_checksums.get(seg.key) == checksum:
+                    if existing_checksums.get(seg.key) == checksum:
                         cached = fetch_cached_translation(conn, f"{norm_title}::{seg.key}", args.lang)
                         if cached:
                             cached_by_key[seg.key] = cached
@@ -1063,6 +1067,9 @@ def main() -> None:
         raise SystemExit(f"rebuild-only: missing cached translations for keys {missing}")
 
     engine_lang = args.engine_lang or args.lang
+    # Project default: Serbian is published in Latin script.
+    if args.lang == "sr" and engine_lang in {"sr", "sr-Cyrl"}:
+        engine_lang = "sr-Latn"
     engine = None
     glossary_id = None
     if to_translate:

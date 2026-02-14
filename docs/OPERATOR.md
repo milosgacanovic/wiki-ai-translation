@@ -36,6 +36,14 @@ Recommended standard pipeline (most common production mode):
 6. Publish behavior is delta too: unchanged units are not rewritten; the first source unit may still update to refresh translation status/source revision metadata.
 7. Cache has two levels: exact page-unit key and content checksum fallback (cross-page reuse).
 8. Fuzzy units are auto-refreshed: if a unit is marked `fuzzy`, the bot forces a harmless unit edit so Translate clears the `needs update` state.
+9. If unit keys change after mark-for-translation (split/merge/reorder), cache is bypassed for that page for the current run to avoid stale-context reuse.
+
+Editor-safe source rules:
+- Edit only inside `<translate>...</translate>`.
+- Do not edit `<!--T:n-->` markers manually.
+- Keep heading/list/ref syntax valid per unit.
+- Re-marking can split units (for example when inserting a new section before References).
+- After structural edits, run one translation pass and spot-check changed units; if needed, force a single-unit retranslate with `--start-key/--max-keys` and `--no-cache`.
 
 Important:
 - Do not rely on manual direct translation commands for normal operation.
