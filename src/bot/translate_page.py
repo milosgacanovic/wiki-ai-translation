@@ -1104,12 +1104,28 @@ def main() -> None:
             tr.text, required_link_tokens_by_key.get(seg.key, set())
         )
         if missing_link_tokens:
-            raise RuntimeError(
-                f"link placeholder loss in segment {seg.key} for {norm_title}/{args.lang}: "
-                f"{', '.join(sorted(missing_link_tokens))}"
+            logging.getLogger("translate").warning(
+                "link placeholder loss in segment %s for %s/%s: %s; retrying with fully protected links",
+                seg.key,
+                norm_title,
+                args.lang,
+                ", ".join(sorted(missing_link_tokens)),
             )
+            if engine is None:
+                raise RuntimeError(
+                    f"link placeholder loss in segment {seg.key} for {norm_title}/{args.lang}: "
+                    f"{', '.join(sorted(missing_link_tokens))}"
+                )
+            fallback_ph = protect_wikitext(seg.text, protect_links=True)
+            fallback_tr = engine.translate(
+                [fallback_ph.text], cfg.source_lang, engine_lang, glossary_id=glossary_id
+            )[0]
+            tr_text = fallback_tr.text
+            ph = fallback_ph
+        else:
+            tr_text = tr.text
 
-        restored = restore_wikitext(tr.text, ph.placeholders)
+        restored = restore_wikitext(tr_text, ph.placeholders)
         # Safety: restore any leftover placeholders in case MT preserved tokens
         for token, value in ph.placeholders.items():
             if token in restored:

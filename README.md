@@ -247,6 +247,57 @@ Clear queue, then run one poll cycle:
 wiki-translate-runner --clear-queue --poll-once
 ```
 
+## Add a New Language
+Full procedure:
+
+1. Update `BOT_TARGET_LANGS` in `/opt/wiki-ai-translation/.env`
+
+```bash
+# example
+BOT_TARGET_LANGS=de,es,fr,it,nl,sr,pt
+```
+
+2. Optional but recommended: add glossary/termbase rules for the new language
+- Insert preferred/forbidden terms into Postgres `termbase`.
+- If using Google glossaries, sync and map it:
+
+```bash
+wiki-translate-glossary-sync --lang pt --glossary-id dr-pt-glossary --gcs-bucket YOUR_BUCKET --replace
+```
+
+```bash
+# .env example
+BOT_GCP_GLOSSARIES={"sr":"dr-sr-glossary","pt":"dr-pt-glossary"}
+```
+
+3. Apply env changes
+- For `docker compose run --rm ...`, next run picks up `.env`.
+- For long-running containers, restart the bot service.
+
+4. Run translation
+- Delta mode (normal):
+
+```bash
+wiki-translate-runner --poll-once
+```
+
+- Backfill all existing source pages for the new language:
+
+```bash
+wiki-translate-runner --run-all
+```
+
+5. Verify
+
+```bash
+wiki-translate-runner --report-last
+```
+
+Then spot-check several `/<lang>` pages in the wiki.
+
+Quick note:
+- If you only need delta processing, updating `BOT_TARGET_LANGS` and running `wiki-translate-runner --poll-once` is enough to start.
+
 Default production flow (recommended):
 - Use `wiki-translate-runner --poll-once` from cron every few minutes.
 - The runner detects source page changes, refreshes translation units via mark-for-translation API,
