@@ -245,20 +245,20 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 * TOOLBOX
 * LANGUAGES
 """,
-    "no": """* navigation
-** Welcome_to_the_DanceResource_Wiki/no|Velkommen til DanceResource Wiki
-** Introduction_to_Conscious_Dance/no|Introduksjon til bevisst dans
-** Core_Methods_and_Techniques/no|Grunnleggende metoder og teknikker
-** Curated_Resource_Library/no|Kurert ressursbibliotek
-** Benefits_of_Conscious_Dance/no|Fordeler med bevisst dans
-** Scientific_Research_and_Evidence/no|Vitenskapelig forskning og evidens
-** Historical_and_Cultural_Context/no|Historisk og kulturell kontekst
-** Conscious_Dance_Practices/no|Etablerte praksiser for bevisst dans
-** Community_and_Global_Collaboration/no|Fellesskap og globalt samarbeid
-** Future_Directions_and_Vision/no|Fremtidige retninger og visjon
-** Appendices/no|Vedlegg
+    "nb": """* navigation
+** Welcome_to_the_DanceResource_Wiki/nb|Velkommen til DanceResource Wiki
+** Introduction_to_Conscious_Dance/nb|Introduksjon til bevisst dans
+** Core_Methods_and_Techniques/nb|Grunnleggende metoder og teknikker
+** Curated_Resource_Library/nb|Kurert ressursbibliotek
+** Benefits_of_Conscious_Dance/nb|Fordeler med bevisst dans
+** Scientific_Research_and_Evidence/nb|Vitenskapelig forskning og evidens
+** Historical_and_Cultural_Context/nb|Historisk og kulturell kontekst
+** Conscious_Dance_Practices/nb|Etablerte praksiser for bevisst dans
+** Community_and_Global_Collaboration/nb|Fellesskap og globalt samarbeid
+** Future_Directions_and_Vision/nb|Fremtidige retninger og visjon
+** Appendices/nb|Vedlegg
 ** recentchanges-url|recentchanges
-** Join_Our_Community/no|Bli med i fellesskapet
+** Join_Our_Community/nb|Bli med i fellesskapet
 * SEARCH
 * TOOLBOX
 * LANGUAGES

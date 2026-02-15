@@ -50,7 +50,7 @@ Planned translation languages for production:
 - Indonesian
 - Arabic
 - Hindi
-- Norwegian
+- Norwegian Bokmal
 - Czech
 - Korean
 - Japanese
@@ -85,7 +85,7 @@ Language codes (for `BOT_TARGET_LANGS`):
 - Indonesian: `id`
 - Arabic: `ar`
 - Hindi: `hi`
-- Norwegian: `no`
+- Norwegian Bokmal: `nb`
 - Czech: `cs`
 - Korean: `ko`
 - Japanese: `ja`

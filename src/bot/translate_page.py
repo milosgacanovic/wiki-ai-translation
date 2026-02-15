@@ -1153,9 +1153,11 @@ def main() -> None:
     # Translate page title for DISPLAYTITLE (only if MT is enabled)
     source_display_title = _source_title_for_displaytitle(norm_title, source_wikitext_en, segments)
     title_translation = None
+    title_locked_by_termbase = False
     for term, preferred in no_translate_terms:
         if source_display_title.strip().lower() == term.strip().lower():
             title_translation = preferred
+            title_locked_by_termbase = True
             break
     if title_translation is None and engine is not None:
         title_translation = engine.translate(
@@ -1370,7 +1372,11 @@ def main() -> None:
         if displaytitle_value is not None or not args.rebuild_only:
             for key in ordered_keys:
                 translated_by_key[key] = DISPLAYTITLE_RE.sub("", translated_by_key[key]).strip()
-        if displaytitle_value is None and not args.rebuild_only:
+        if title_locked_by_termbase:
+            # If title is protected by termbase no-translate rules, force the
+            # preferred value even when a previous Page display title exists.
+            displaytitle_value = title_translation
+        elif displaytitle_value is None and not args.rebuild_only:
             displaytitle_value = title_translation
         if displaytitle_value:
             if not args.dry_run:
