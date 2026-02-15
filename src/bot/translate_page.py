@@ -72,13 +72,24 @@ def _is_safe_internal_link(target: str) -> bool:
     return ":" not in target
 
 
+def _strip_known_lang_suffix(page: str, known_langs: set[str]) -> str:
+    if "/" not in page:
+        return page
+    head, tail = page.rsplit("/", 1)
+    if tail in known_langs:
+        return head
+    return page
+
+
 def _tokenize_links(
-    text: str, lang: str
+    text: str, lang: str, known_langs: set[str] | None = None
 ) -> tuple[str, dict[str, str], list[tuple[str, str]], set[str], set[str]]:
     placeholders: dict[str, str] = {}
     link_meta: list[tuple[str, str]] = []
     source_targets: set[str] = set()
     required_tokens: set[str] = set()
+
+    known_langs = known_langs or set()
 
     def _replace(match: re.Match) -> str:
         target = match.group(1)
@@ -87,11 +98,12 @@ def _tokenize_links(
             return match.group(0)
 
         page, anchor = (target.split("#", 1) + [""])[:2]
-        source_targets.add(page)
+        base_page = _strip_known_lang_suffix(page, known_langs)
+        source_targets.add(base_page)
         if page.endswith(f"/{lang}"):
             new_target = page
         else:
-            new_target = f"{page}/{lang}"
+            new_target = f"{base_page}/{lang}"
         if anchor:
             new_target = f"{new_target}#{anchor}"
 
@@ -424,7 +436,10 @@ def _restore_category_namespace(source: str, translated: str) -> str:
     return NS_LINK_RE.sub(_repl, translated)
 
 
-def _restore_internal_link_targets(source: str, translated: str, lang: str) -> str:
+def _restore_internal_link_targets(
+    source: str, translated: str, lang: str, known_langs: set[str] | None = None
+) -> str:
+    known_langs = known_langs or set()
     source_links = [m for m in LINK_RE.finditer(source) if _is_safe_internal_link(m.group(1))]
     translated_links = [m for m in LINK_RE.finditer(translated) if _is_safe_internal_link(m.group(1))]
     if not source_links or not translated_links:
@@ -433,10 +448,11 @@ def _restore_internal_link_targets(source: str, translated: str, lang: str) -> s
     for src, tr in zip(source_links, translated_links):
         src_target = src.group(1)
         src_page, src_anchor = (src_target.split("#", 1) + [""])[:2]
+        src_base_page = _strip_known_lang_suffix(src_page, known_langs)
         if src_page.endswith(f"/{lang}"):
             new_page = src_page
         else:
-            new_page = f"{src_page}/{lang}"
+            new_page = f"{src_base_page}/{lang}"
         new_target = f"{new_page}#{src_anchor}" if src_anchor else new_page
         tr_display = tr.group(2)
         replacement = f"[[{new_target}|{tr_display}]]" if tr_display is not None else f"[[{new_target}]]"
@@ -482,14 +498,13 @@ def _rewrite_internal_links_to_lang_with_source(
     lang: str,
     source_targets: set[str],
     implicit_display_by_target: dict[str, str] | None = None,
+    known_langs: set[str] | None = None,
 ) -> str:
     implicit_display_by_target = implicit_display_by_target or {}
+    known_langs = known_langs or set()
 
     def _trim_lang_suffix(value: str) -> str:
-        suffix = f"/{lang}"
-        if value.endswith(suffix):
-            return value[: -len(suffix)]
-        return value
+        return _strip_known_lang_suffix(value, known_langs)
 
     def _repl(match: re.Match) -> str:
         target = match.group(1)
@@ -535,6 +550,28 @@ def _translated_target_display_title(
         except Exception:
             continue
     return None
+
+
+def _translation_status_meta_for_page(
+    client: MediaWikiClient,
+    norm_title: str,
+    lang: str,
+    source_lang: str = "en",
+) -> dict[str, str]:
+    translated_page_title = f"{norm_title}/{lang}"
+    out: dict[str, str] = {}
+    try:
+        out = _translation_status_from_ai_info(client.get_ai_translation_info(translated_page_title))
+    except Exception:
+        out = {}
+    try:
+        props, _, _ = client.get_page_props(translated_page_title)
+        out = {**_translation_status_from_props(props), **out}
+    except Exception:
+        pass
+    if "dr_translation_status" not in out:
+        out = {**out, **_translation_status_from_unit1(client, norm_title, lang, source_lang=source_lang)}
+    return out
 
 
 def _build_no_translate_terms(
@@ -872,8 +909,8 @@ def main() -> None:
                     return {"approve_status": "no_revisions"}
                 raise
 
-    wikitext, rev_id, norm_title = client.get_page_wikitext(args.title)
-    if _is_redirect_wikitext(wikitext):
+    source_wikitext_en, rev_id, norm_title = client.get_page_wikitext(args.title)
+    if _is_redirect_wikitext(source_wikitext_en):
         logging.getLogger("translate").info("skip redirect page: %s", norm_title)
         return
     source_rev = str(rev_id)
@@ -888,15 +925,9 @@ def main() -> None:
             exc,
         )
     props, _, _ = client.get_page_props(translated_page_title)
-    status_meta = _translation_status_from_ai_info(ai_info)
-    status_meta = {**_translation_status_from_props(props), **status_meta}
-    if "dr_translation_status" not in status_meta:
-        status_meta = {
-            **status_meta,
-            **_translation_status_from_unit1(
-                client, norm_title, args.lang, source_lang=cfg.source_lang
-            ),
-        }
+    status_meta = _translation_status_meta_for_page(
+        client, norm_title, args.lang, source_lang=cfg.source_lang
+    )
     status = status_meta.get("dr_translation_status", "").strip().lower() or "machine"
     if status not in ("machine", "reviewed", "outdated"):
         status = "machine"
@@ -952,9 +983,9 @@ def main() -> None:
             unit_keys = sorted(set(unit_keys), key=lambda k: int(k))
             segments = _fetch_unit_sources(client, norm_title, unit_keys)
             if not segments:
-                segments = split_translate_units(wikitext)
+                segments = split_translate_units(source_wikitext_en)
         else:
-            segments = split_translate_units(wikitext)
+            segments = split_translate_units(source_wikitext_en)
     if not segments:
         raise SystemExit("no segments found; is the page marked for translation?")
 
@@ -966,6 +997,40 @@ def main() -> None:
         seen_keys.add(seg.key)
         deduped.append(seg)
     segments = deduped
+
+    # Optional reviewed-language pivot, e.g. hr <- sr when sr is reviewed.
+    pivot_source_lang = cfg.pivot_reviewed_map.get(args.lang) if cfg.pivot_reviewed_map else None
+    pivot_active = False
+    if pivot_source_lang and pivot_source_lang != cfg.source_lang and status == "machine":
+        pivot_meta = _translation_status_meta_for_page(
+            client, norm_title, pivot_source_lang, source_lang=cfg.source_lang
+        )
+        if pivot_meta.get("dr_translation_status", "").strip().lower() == "reviewed":
+            pivoted: list[Segment] = []
+            pivot_missing = 0
+            for seg in segments:
+                unit_title = _unit_title(norm_title, seg.key, pivot_source_lang)
+                try:
+                    pivot_text, _, _ = client.get_page_wikitext(unit_title)
+                    pivot_text = TRANSLATION_STATUS_TEMPLATE_RE.sub("", pivot_text).strip()
+                    if pivot_text:
+                        pivoted.append(Segment(key=seg.key, text=pivot_text))
+                    else:
+                        pivot_missing += 1
+                        pivoted.append(seg)
+                except Exception:
+                    pivot_missing += 1
+                    pivoted.append(seg)
+            segments = pivoted
+            logging.getLogger("translate").info(
+                "pivot source enabled for %s/%s: %s->%s (missing_units=%s)",
+                norm_title,
+                args.lang,
+                pivot_source_lang,
+                args.lang,
+                pivot_missing,
+            )
+            pivot_active = True
 
     logging.getLogger("translate").info(
         "page=%s rev_id=%s segments=%s", args.title, rev_id, len(segments)
@@ -1067,6 +1132,7 @@ def main() -> None:
         raise SystemExit(f"rebuild-only: missing cached translations for keys {missing}")
 
     engine_lang = args.engine_lang or args.lang
+    translate_source_lang = pivot_source_lang if pivot_active else cfg.source_lang
     # Project default: Serbian is published in Latin script.
     if args.lang == "sr" and engine_lang in {"sr", "sr-Cyrl"}:
         engine_lang = "sr-Latn"
@@ -1085,7 +1151,7 @@ def main() -> None:
             glossary_id = cfg.gcp_glossaries.get(args.lang)
 
     # Translate page title for DISPLAYTITLE (only if MT is enabled)
-    source_display_title = _source_title_for_displaytitle(norm_title, wikitext, segments)
+    source_display_title = _source_title_for_displaytitle(norm_title, source_wikitext_en, segments)
     title_translation = None
     for term, preferred in no_translate_terms:
         if source_display_title.strip().lower() == term.strip().lower():
@@ -1093,7 +1159,7 @@ def main() -> None:
             break
     if title_translation is None and engine is not None:
         title_translation = engine.translate(
-            [source_display_title], cfg.source_lang, engine_lang, glossary_id=glossary_id
+            [source_display_title], translate_source_lang, engine_lang, glossary_id=glossary_id
         )[0].text
     if title_translation is None:
         title_translation = source_display_title
@@ -1101,6 +1167,10 @@ def main() -> None:
         title_translation = sr_cyrillic_to_latin(title_translation)
     if termbase_entries:
         title_translation = _apply_termbase(title_translation, termbase_entries)
+
+    known_langs = set(cfg.target_langs) | {cfg.source_lang}
+    if pivot_active and pivot_source_lang:
+        known_langs.add(pivot_source_lang)
 
     protected = []
     link_display_requests: dict[str, str] = {}
@@ -1114,7 +1184,7 @@ def main() -> None:
             link_meta,
             seg_targets,
             required_link_tokens,
-        ) = _tokenize_links(seg.text, args.lang)
+        ) = _tokenize_links(seg.text, args.lang, known_langs=known_langs)
         source_targets.update(seg_targets)
         required_link_tokens_by_key[seg.key] = required_link_tokens
         source_by_key[seg.key] = seg.text
@@ -1132,7 +1202,7 @@ def main() -> None:
     translated = []
     if protected and engine is not None:
         translated = engine.translate(
-            [p.text for _, p in protected], cfg.source_lang, engine_lang, glossary_id=glossary_id
+            [p.text for _, p in protected], translate_source_lang, engine_lang, glossary_id=glossary_id
         )
     protected_map: dict[str, tuple[object, object]] = {}
     for (seg, ph), tr in zip(protected, translated):
@@ -1143,7 +1213,7 @@ def main() -> None:
     if link_display_requests and engine is not None:
         displays = list(link_display_requests.values())
         translated_displays = engine.translate(
-            displays, cfg.source_lang, engine_lang, glossary_id=glossary_id
+            displays, translate_source_lang, engine_lang, glossary_id=glossary_id
         )
         for (target, _), tr in zip(link_display_requests.items(), translated_displays):
             link_display_translated[target] = tr.text
@@ -1181,7 +1251,7 @@ def main() -> None:
             fallback_labels.append(label)
         if fallback_labels:
             fallback_translated = engine.translate(
-                fallback_labels, cfg.source_lang, engine_lang, glossary_id=glossary_id
+                fallback_labels, translate_source_lang, engine_lang, glossary_id=glossary_id
             )
             for target_page, tr in zip(fallback_targets, fallback_translated):
                 value = tr.text
@@ -1234,7 +1304,7 @@ def main() -> None:
                 )
             fallback_ph = protect_wikitext(seg.text, protect_links=True)
             fallback_tr = engine.translate(
-                [fallback_ph.text], cfg.source_lang, engine_lang, glossary_id=glossary_id
+                [fallback_ph.text], translate_source_lang, engine_lang, glossary_id=glossary_id
             )[0]
             tr_text = fallback_tr.text
             ph = fallback_ph
@@ -1270,7 +1340,11 @@ def main() -> None:
             restored = LINK_RE.sub(_rewrite_display, restored)
         restored = _fix_broken_links(restored, args.lang)
         restored = _rewrite_internal_links_to_lang_with_source(
-            restored, args.lang, source_targets, localized_display_by_target
+            restored,
+            args.lang,
+            source_targets,
+            localized_display_by_target,
+            known_langs=known_langs,
         )
         if termbase_entries:
             restored = _apply_termbase_safe(restored, termbase_entries)
@@ -1362,9 +1436,15 @@ def main() -> None:
         restored = _restore_html_tags(source_text, restored)
         restored = _restore_category_namespace(source_text, restored)
         restored = _rewrite_internal_links_to_lang_with_source(
-            restored, args.lang, source_targets, localized_display_by_target
+            restored,
+            args.lang,
+            source_targets,
+            localized_display_by_target,
+            known_langs=known_langs,
         )
-        restored = _restore_internal_link_targets(source_text, restored, args.lang)
+        restored = _restore_internal_link_targets(
+            source_text, restored, args.lang, known_langs=known_langs
+        )
         restored = _normalize_heading_body_spacing(restored)
         if key == metadata_key:
             restored = _compact_leading_metadata_preamble(restored)

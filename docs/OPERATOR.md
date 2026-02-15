@@ -7,6 +7,9 @@
 - Store Google Cloud service account JSON in `.secrets/` and set `GCP_CREDENTIALS_PATH`.
 - For glossaries, `GCP_LOCATION` must be a regional location (for example `us-central1`).
 - `BOT_AUTO_WRAP=1` enables auto-wrapping main namespace pages in `<translate>...</translate>`.
+- `BOT_PIVOT_REVIEWED_MAP` enables reviewed-language pivot for machine targets.
+  Example: `{"hr":"sr"}` means when translating to `hr`, if matching `sr` page is
+  `reviewed` and `hr` is `machine`, MT source becomes Serbian (`sr`) instead of English.
 - `BOT_TRANSLATE_MARK_ACTION` and `BOT_TRANSLATE_MARK_PARAMS` can be set to call a Translate
   extension API after wrapping if units are not detected.
   Example:

@@ -32,6 +32,7 @@ class Config:
     translate_mark_params: dict[str, str] | None = None
     skip_title_prefixes: tuple[str, ...] = ()
     skip_translation_subpages: bool = True
+    pivot_reviewed_map: dict[str, str] | None = None
 
 
 def load_config() -> Config:
@@ -69,6 +70,24 @@ def load_config() -> Config:
             raise RuntimeError("BOT_GCP_GLOSSARIES must be a JSON object")
         return {str(k): str(v) for k, v in data.items()}
 
+    def _load_pivot_reviewed_map() -> dict[str, str] | None:
+        raw = os.getenv("BOT_PIVOT_REVIEWED_MAP")
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("BOT_PIVOT_REVIEWED_MAP must be valid JSON") from exc
+        if not isinstance(data, dict):
+            raise RuntimeError("BOT_PIVOT_REVIEWED_MAP must be a JSON object")
+        out: dict[str, str] = {}
+        for k, v in data.items():
+            tk = str(k).strip()
+            tv = str(v).strip()
+            if tk and tv and tk != tv:
+                out[tk] = tv
+        return out or None
+
     def req(name: str) -> str:
         value = os.getenv(name)
         if not value:
@@ -104,5 +123,6 @@ def load_config() -> Config:
         skip_title_prefixes=_load_skip_prefixes(),
         skip_translation_subpages=os.getenv("BOT_SKIP_TRANSLATION_SUBPAGES", "1")
         not in ("0", "false", "False"),
+        pivot_reviewed_map=_load_pivot_reviewed_map(),
     )
     return cfg

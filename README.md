@@ -270,6 +270,18 @@ wiki-translate-glossary-sync --lang pt --glossary-id dr-pt-glossary --gcs-bucket
 BOT_GCP_GLOSSARIES={"sr":"dr-sr-glossary","pt":"dr-pt-glossary"}
 ```
 
+Optional reviewed-language pivot (example for Croatian):
+
+```bash
+BOT_PIVOT_REVIEWED_MAP={"hr":"sr"}
+```
+
+Behavior:
+- If target page is `hr` with `status=machine`, and matching `sr` page is `status=reviewed`,
+  translation uses `sr -> hr`.
+- Otherwise it falls back to normal `en -> hr`.
+- `hr` pages with `status=reviewed` remain locked (not overwritten).
+
 3. Apply env changes
 - For `docker compose run --rm ...`, next run picks up `.env`.
 - For long-running containers, restart the bot service.
