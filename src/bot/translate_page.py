@@ -51,6 +51,8 @@ REDIRECT_RE = re.compile(r"^\s*#redirect\b", re.IGNORECASE)
 UNRESOLVED_PLACEHOLDER_RE = re.compile(r"__PH\d+__|__LINK\d+__")
 BROKEN_LINK_RE = re.compile(r"\[\[(?:__PH\d+__|__LINK\d+__)\|([^\]]+)\]\]")
 DISPLAYTITLE_RE = re.compile(r"\{\{\s*DISPLAYTITLE\s*:[^}]+\}\}", re.IGNORECASE)
+REF_TOKEN_RE = re.compile(r"<ref\b[^>]*>.*?</ref>|<ref\b[^>]*/\s*>", re.IGNORECASE | re.DOTALL)
+UNDER_DEVELOPMENT_RE = re.compile(r"\{\{\s*UnderDevelopment\s*\}\}", re.IGNORECASE)
 DISCLAIMER_TABLE_RE = re.compile(
     r"\{\|\s*class=\"translation-disclaimer\".*?\|\}", re.DOTALL
 )
@@ -136,6 +138,27 @@ def _collapse_blank_lines(text: str) -> str:
 
 def _strip_unresolved_placeholders(text: str) -> str:
     return UNRESOLVED_PLACEHOLDER_RE.sub("", text)
+
+
+def _restore_missing_refs_from_source(source: str, translated: str) -> str:
+    # MT can occasionally drop <ref> blocks; enforce source ref preservation.
+    refs = REF_TOKEN_RE.findall(source)
+    if not refs:
+        return translated
+    out = translated
+    for ref in refs:
+        if ref not in out:
+            out = f"{out}\n{ref}"
+    return out
+
+
+def _restore_underdevelopment_from_source(source: str, translated: str) -> str:
+    # Keep {{UnderDevelopment}} when present in source segment.
+    if not UNDER_DEVELOPMENT_RE.search(source):
+        return translated
+    if UNDER_DEVELOPMENT_RE.search(translated):
+        return translated
+    return f"{translated}\n{{{{UnderDevelopment}}}}"
 
 
 def _missing_required_tokens(text: str, required_tokens: set[str]) -> set[str]:
@@ -462,7 +485,30 @@ def _restore_internal_link_targets(
 
 def _normalize_heading_body_spacing(text: str) -> str:
     # Keep only one newline between a heading line and the following body line.
-    return re.sub(r"(={2,6}[^\n]*={2,6})\n{2,}", r"\1\n", text)
+    text = re.sub(r"(={2,6}[^\n]*={2,6})\n{2,}", r"\1\n", text)
+    # If MT glues heading and body on one line, split after closing heading marker.
+    text = re.sub(r"(={2,6}[^\n]*={2,6})[ \t]+([^\n])", r"\1\n\2", text)
+    # If MT splits a heading across lines, merge back to one valid heading line.
+    text = re.sub(
+        r"(?m)^([ \t]*)(={2,6})[ \t]*\n[ \t]*([^\n]+?)[ \t]*(\2)[ \t]*$",
+        r"\1\2 \3 \4",
+        text,
+    )
+    return text
+
+
+def _strip_accidental_preformat(source: str, translated: str) -> str:
+    # MediaWiki treats leading-space lines as <pre>. Remove accidental indentation
+    # when source line doesn't use preformat and translation is uniformly indented.
+    src_lines = [ln for ln in source.splitlines() if ln.strip()]
+    tr_lines = [ln for ln in translated.splitlines() if ln.strip()]
+    if not tr_lines:
+        return translated
+    if any(ln.startswith(" ") for ln in src_lines):
+        return translated
+    if all(ln.startswith(" ") for ln in tr_lines):
+        return "\n".join(ln[1:] if ln.startswith(" ") else ln for ln in translated.splitlines())
+    return translated
 
 
 def _first_source_unit_key(client: MediaWikiClient, norm_title: str, source_lang: str) -> str:
@@ -1318,6 +1364,9 @@ def main() -> None:
         for token, value in ph.placeholders.items():
             if token in restored:
                 restored = restored.replace(token, value)
+        restored = _restore_missing_refs_from_source(seg.text, restored)
+        restored = _restore_underdevelopment_from_source(seg.text, restored)
+        restored = _strip_accidental_preformat(seg.text, restored)
         restored = _restore_file_links(seg.text, restored)
         restored = _restore_html_tags(seg.text, restored)
         restored = _restore_category_namespace(seg.text, restored)
@@ -1438,6 +1487,9 @@ def main() -> None:
             continue
         restored = translated_by_key[key]
         source_text = source_by_key.get(key, "")
+        restored = _restore_missing_refs_from_source(source_text, restored)
+        restored = _restore_underdevelopment_from_source(source_text, restored)
+        restored = _strip_accidental_preformat(source_text, restored)
         restored = _restore_file_links(source_text, restored)
         restored = _restore_html_tags(source_text, restored)
         restored = _restore_category_namespace(source_text, restored)
