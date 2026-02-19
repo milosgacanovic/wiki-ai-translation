@@ -18,6 +18,8 @@ from bot.translate_page import (
     _normalize_heading_body_spacing,
     _rewrite_internal_links_to_lang_with_source,
     _restore_category_namespace,
+    _translate_resource_row_templates,
+    _restore_resource_row_preserve_fields,
 )
 from bot.segmenter import Segment
 
@@ -205,3 +207,67 @@ def test_restore_category_namespace():
     translated = "[[Categoria:Práticas de Dança Consciente]]\n[[Categoria:Meditação pela Dança]]"
     out = _restore_category_namespace(source, translated)
     assert out == "[[Category:Práticas de Dança Consciente]]\n[[Category:Meditação pela Dança]]"
+
+
+def test_translate_resource_row_templates_preserves_title_url_creator():
+    class _Resp:
+        def __init__(self, text: str):
+            self.text = text
+
+    class _FakeEngine:
+        def translate(self, texts, source_lang, target_lang, glossary_id=None):
+            _ = source_lang, target_lang, glossary_id
+            return [_Resp(f"TR:{t}") for t in texts]
+
+    source = (
+        "{{ResourceRow\n"
+        "| title = Original Title\n"
+        "| url = https://example.org/x\n"
+        "| creator = Jane Doe\n"
+        "| notes = Some note\n"
+        "}}"
+    )
+    out = _translate_resource_row_templates(
+        source,
+        engine=_FakeEngine(),
+        source_lang="en",
+        target_lang="sr",
+        glossary_id=None,
+        no_translate_terms=[],
+        termbase_entries=[],
+        engine_lang="sr",
+        preserve_fields=("title", "url", "creator"),
+        translate_fields=("notes",),
+    )
+    assert "| title = Original Title" in out
+    assert "| url = https://example.org/x" in out
+    assert "| creator = Jane Doe" in out
+    assert "| notes = TR:Some note" in out
+
+
+def test_restore_resource_row_preserve_fields_restores_source_values():
+    source = (
+        "{{ResourceRow\n"
+        "| title = Original Title\n"
+        "| url = https://example.org/x\n"
+        "| creator = Jane Doe\n"
+        "| notes = Source note\n"
+        "}}"
+    )
+    translated = (
+        "{{ResourceRow\n"
+        "| title = Preveden naslov\n"
+        "| url = https://primer.rs/x\n"
+        "| creator = Džejn Dou\n"
+        "| notes = Prevedena beleška\n"
+        "}}"
+    )
+    out = _restore_resource_row_preserve_fields(
+        source,
+        translated,
+        ("title", "url", "creator"),
+    )
+    assert "| title = Original Title" in out
+    assert "| url = https://example.org/x" in out
+    assert "| creator = Jane Doe" in out
+    assert "| notes = Prevedena beleška" in out

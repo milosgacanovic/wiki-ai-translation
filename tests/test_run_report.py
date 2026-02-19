@@ -55,9 +55,12 @@ def test_run_report_writes_file(tmp_path):
         conn.commit()
 
         path = write_report_file(conn, run_id, directory=str(tmp_path))
+        body = path.read_text(encoding="utf-8")
         assert path.exists()
-        assert "Translation Run" in path.read_text(encoding="utf-8")
-        assert "translate:ok" in path.read_text(encoding="utf-8")
+        assert "Translation Run" in body
+        assert "translate:ok" in body
+        assert "## Source Pages Translated (Absolute URLs)" in body
+        assert "/Page" in body
 
         report = report_last_run(conn)
         assert "run_id" in report

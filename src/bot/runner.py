@@ -37,6 +37,11 @@ def _engine_lang_for(lang: str) -> str:
     return lang
 
 
+def _recentchanges_cursor_name(cfg) -> str:
+    langs = ",".join(sorted(set(cfg.target_langs)))
+    return f"recentchanges:{langs}"
+
+
 def process_queue(
     cfg,
     client,
@@ -322,9 +327,10 @@ def main() -> None:
         return
 
     if args.poll_once:
+        cursor_name = _recentchanges_cursor_name(cfg)
         if args.dry_run:
             with get_conn(cfg.pg_dsn) as conn:
-                since = get_ingest_cursor(conn, "recentchanges")
+                since = get_ingest_cursor(conn, cursor_name)
             changes, _new_since = poll_recent_changes(client, since, limit=args.poll_limit)
             plan_pages: set[str] = set()
             with get_conn(cfg.pg_dsn) as conn:
@@ -357,7 +363,7 @@ def main() -> None:
         run_id = None
         with get_conn(cfg.pg_dsn) as conn:
             run_id = start_run(conn, "poll-once", cfg)
-            since = get_ingest_cursor(conn, "recentchanges")
+            since = get_ingest_cursor(conn, cursor_name)
         changes, new_since = poll_recent_changes(client, since, limit=args.poll_limit)
         if changes:
             with get_conn(cfg.pg_dsn) as conn:
@@ -368,7 +374,7 @@ def main() -> None:
                     except Exception as exc:
                         log_item(conn, run_id, "ingest", "error", change.title, None, str(exc))
         with get_conn(cfg.pg_dsn) as conn:
-            set_ingest_cursor(conn, "recentchanges", new_since)
+            set_ingest_cursor(conn, cursor_name, new_since)
         with get_conn(cfg.pg_dsn) as conn:
             total_jobs = count_jobs(conn, status="queued", job_type="translate_page")
         progress = {"done": 0, "total": max(total_jobs, 1)}

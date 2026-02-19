@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from .config import Config
 
@@ -189,6 +191,38 @@ def fetch_translate_ok_pairs(conn, run_id: int) -> list[tuple[str, str]]:
     return [(str(r[0]), str(r[1])) for r in rows]
 
 
+def fetch_translated_source_pages(conn, run_id: int) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT page_title
+            FROM run_items
+            WHERE run_id = %s
+              AND kind = 'translate'
+              AND status = 'ok'
+              AND page_title IS NOT NULL
+            ORDER BY page_title
+            """,
+            (run_id,),
+        )
+        rows = cur.fetchall()
+    return [str(r[0]) for r in rows]
+
+
+def _wiki_base_url() -> str:
+    api = os.getenv("MW_API_URL", "").strip()
+    if api:
+        if api.endswith("/api.php"):
+            return api[: -len("/api.php")]
+        if api.endswith("api.php"):
+            return api[: -len("api.php")].rstrip("/")
+    return "https://wiki.danceresource.org"
+
+
+def _title_to_absolute_url(base_url: str, title: str) -> str:
+    return f"{base_url}/{quote(title.replace(' ', '_'), safe='/_-()')}"
+
+
 def fetch_stats(conn, run_id: int) -> dict[str, int]:
     stats: dict[str, int] = {}
     with conn.cursor() as cur:
@@ -273,6 +307,8 @@ def write_report_file(conn, run_id: int, directory: str = "docs/runs") -> Path:
     errors = fetch_errors(conn, run_id)
     stats = fetch_stats(conn, run_id)
     items = fetch_items_by_status(conn, run_id)
+    source_pages = fetch_translated_source_pages(conn, run_id)
+    base_url = _wiki_base_url()
 
     Path(directory).mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
@@ -307,6 +343,14 @@ def write_report_file(conn, run_id: int, directory: str = "docs/runs") -> Path:
             lines.append(
                 f"- {err['kind']} {err['page_title']} {err['lang']}: {err['message']}"
             )
+    lines.append("")
+
+    lines.append("## Source Pages Translated (Absolute URLs)")
+    if not source_pages:
+        lines.append("- none")
+    else:
+        for title in source_pages:
+            lines.append(f"- {_title_to_absolute_url(base_url, title)}")
     lines.append("")
 
     lines.append("## Items")

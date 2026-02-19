@@ -416,6 +416,21 @@ class MediaWikiClient:
         if "success" not in result_lower and "already approved" not in result_lower:
             raise MediaWikiError(f"approve failed: {data}")
 
+    def purge(self, title: str, forcelinkupdate: bool = True) -> None:
+        if not self.csrf_token:
+            raise MediaWikiError("csrf token missing; call login() first")
+        params: dict[str, Any] = {
+            "action": "purge",
+            "titles": title,
+            "token": self.csrf_token,
+        }
+        if forcelinkupdate:
+            params["forcelinkupdate"] = 1
+        data = self._request("POST", params)
+        items = data.get("purge") or []
+        if not items or not bool(items[0].get("purged")):
+            raise MediaWikiError(f"purge failed: {data}")
+
     def all_pages_page(
         self, namespace: int = 0, limit: int = 200, apcontinue: str | None = None
     ) -> tuple[list[str], str | None]:

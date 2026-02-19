@@ -222,6 +222,8 @@ wiki-translate-runner --poll-once
 
 `--poll-once` paginates MediaWiki recent changes until all available batches are processed in that run.
 Use `--poll-limit N` to cap how many recent changes are processed in one run.
+Recentchanges cursor is scoped by current `BOT_TARGET_LANGS`, so polling with one language
+does not consume events for other language sets.
 
 Delta dry-run preview (no queue/process/cursor changes):
 
@@ -440,6 +442,20 @@ wiki-translate-glossary-sync --lang sr --glossary-id dr-sr-glossary --gcs-bucket
 ```bash
 BOT_GCP_GLOSSARIES={"sr":"dr-sr-glossary"}
 ```
+
+## ResourceRow Template Translation Rules
+`{{ResourceRow ...}}` is handled with field-level rules:
+- `title`, `url`, and `creator` are preserved by default (not translated).
+- `year`, `format`, `access`, `tags`, `notes` are translated by default.
+
+You can override this in `.env`:
+
+```bash
+BOT_RESOURCE_ROW_PRESERVE_FIELDS=title,url,creator
+BOT_RESOURCE_ROW_TRANSLATE_FIELDS=year,format,access,tags,notes
+```
+
+This lets you keep source citation titles intact while still translating table headers and content fields.
 
 ## License
 Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).

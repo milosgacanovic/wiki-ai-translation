@@ -68,6 +68,8 @@ LEADING_META_LINE_RE = re.compile(
     r"(?:\{\{[^{}\n]+\}\}|__[A-Z0-9_]+__|\[\[(?:File|Image):[^\]]+\]\]|<!--.*?-->)+",
     re.IGNORECASE,
 )
+RESOURCE_ROW_START_RE = re.compile(r"\{\{\s*ResourceRow\b", re.IGNORECASE)
+RESOURCE_ROW_PARAM_RE = re.compile(r"(?mi)^(\s*\|\s*)([^=\n]+?)(\s*=\s*)")
 
 
 def _is_safe_internal_link(target: str) -> bool:
@@ -81,6 +83,169 @@ def _strip_known_lang_suffix(page: str, known_langs: set[str]) -> str:
     if tail in known_langs:
         return head
     return page
+
+
+def _normalize_param_key(name: str) -> str:
+    return re.sub(r"[\s_]+", "", name).strip().lower()
+
+
+def _find_balanced_template_end(text: str, start: int) -> int | None:
+    i = start
+    depth = 0
+    n = len(text)
+    while i < n - 1:
+        if text.startswith("{{", i):
+            depth += 1
+            i += 2
+            continue
+        if text.startswith("}}", i) and depth > 0:
+            depth -= 1
+            i += 2
+            if depth == 0:
+                return i
+            continue
+        i += 1
+    return None
+
+
+def _translate_resource_row_templates(
+    text: str,
+    *,
+    engine: GoogleTranslateV3 | None,
+    source_lang: str,
+    target_lang: str,
+    glossary_id: str | None,
+    no_translate_terms: list[tuple[str, str]],
+    termbase_entries: list[dict],
+    engine_lang: str,
+    preserve_fields: tuple[str, ...],
+    translate_fields: tuple[str, ...],
+) -> str:
+    if engine is None or "{{" not in text:
+        return text
+    preserve = {_normalize_param_key(k) for k in preserve_fields}
+    allowed = {_normalize_param_key(k) for k in translate_fields if k.strip()}
+    out: list[str] = []
+    pos = 0
+    changed = False
+    while True:
+        m = RESOURCE_ROW_START_RE.search(text, pos)
+        if not m:
+            out.append(text[pos:])
+            break
+        start = m.start()
+        end = _find_balanced_template_end(text, start)
+        if end is None:
+            out.append(text[pos:])
+            break
+        out.append(text[pos:start])
+        tpl = text[start:end]
+        body = tpl[:-2]
+        matches = list(RESOURCE_ROW_PARAM_RE.finditer(body))
+        if not matches:
+            out.append(tpl)
+            pos = end
+            continue
+        rebuilt_parts: list[str] = []
+        cursor = 0
+        for idx, pm in enumerate(matches):
+            value_start = pm.end()
+            value_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
+            rebuilt_parts.append(body[cursor:value_start])
+            key = _normalize_param_key(pm.group(2))
+            value = body[value_start:value_end]
+            should_translate = key not in preserve and (not allowed or key in allowed)
+            if should_translate and value.strip():
+                lead = re.match(r"^\s*", value).group(0)
+                trail = re.search(r"\s*$", value).group(0)
+                core = value.strip()
+                ph = protect_wikitext(core, protect_links=True)
+                protected_text, nt_placeholders = _protect_terms(ph.text, no_translate_terms)
+                translated_core = engine.translate(
+                    [protected_text], source_lang, target_lang, glossary_id=glossary_id
+                )[0].text
+                restored_core = restore_wikitext(
+                    translated_core, {**ph.placeholders, **nt_placeholders}
+                )
+                if engine_lang == "sr-Latn":
+                    restored_core = sr_cyrillic_to_latin(restored_core)
+                if termbase_entries:
+                    restored_core = _apply_termbase_safe(restored_core, termbase_entries)
+                value = f"{lead}{restored_core}{trail}"
+                changed = True
+            rebuilt_parts.append(value)
+            cursor = value_end
+        rebuilt_parts.append(body[cursor:])
+        out.append("".join(rebuilt_parts) + "}}")
+        pos = end
+    if not changed:
+        return text
+    return "".join(out)
+
+
+def _restore_resource_row_preserve_fields(
+    source_text: str,
+    translated_text: str,
+    preserve_fields: tuple[str, ...],
+) -> str:
+    preserve = {_normalize_param_key(k) for k in preserve_fields}
+    if not preserve:
+        return translated_text
+
+    def _extract_templates(text: str) -> list[str]:
+        out: list[str] = []
+        pos = 0
+        while True:
+            m = RESOURCE_ROW_START_RE.search(text, pos)
+            if not m:
+                break
+            start = m.start()
+            end = _find_balanced_template_end(text, start)
+            if end is None:
+                break
+            out.append(text[start:end])
+            pos = end
+        return out
+
+    source_templates = _extract_templates(source_text)
+    trans_templates = _extract_templates(translated_text)
+    if not source_templates or not trans_templates:
+        return translated_text
+
+    def _parse_param_values(tpl: str) -> dict[str, str]:
+        body = tpl[:-2] if tpl.endswith("}}") else tpl
+        matches = list(RESOURCE_ROW_PARAM_RE.finditer(body))
+        out: dict[str, str] = {}
+        for idx, m in enumerate(matches):
+            key = _normalize_param_key(m.group(2))
+            start = m.end()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
+            out[key] = body[start:end]
+        return out
+
+    rebuilt = translated_text
+    for src_tpl, tr_tpl in zip(source_templates, trans_templates):
+        src_vals = _parse_param_values(src_tpl)
+        tr_body = tr_tpl[:-2] if tr_tpl.endswith("}}") else tr_tpl
+        matches = list(RESOURCE_ROW_PARAM_RE.finditer(tr_body))
+        if not matches:
+            continue
+        parts: list[str] = []
+        cursor = 0
+        for idx, m in enumerate(matches):
+            start = m.end()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(tr_body)
+            parts.append(tr_body[cursor:start])
+            key = _normalize_param_key(m.group(2))
+            value = tr_body[start:end]
+            if key in preserve and key in src_vals:
+                value = src_vals[key]
+            parts.append(value)
+            cursor = end
+        parts.append(tr_body[cursor:])
+        patched_tpl = "".join(parts) + "}}"
+        rebuilt = rebuilt.replace(tr_tpl, patched_tpl, 1)
+    return rebuilt
 
 
 def _tokenize_links(
@@ -743,6 +908,13 @@ def _normalize_leading_status_directives(text: str) -> str:
         count=1,
         flags=re.IGNORECASE,
     )
+    text = re.sub(
+        r"(__NOTOC__)\s+(?=\S)",
+        r"\1",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
     # Do not leave an empty spacer line before content after top metadata.
     text = re.sub(
         r"^((?:\{\{\s*Translation_status\b[^{}]*\}\})?(?:\{\{DISPLAYTITLE:[^}]+\}\})(?:__NOTOC__)?(?:\[\[File:[^\]]+\]\])?)\s*\n{2,}",
@@ -780,6 +952,9 @@ def _compact_leading_metadata_preamble(text: str) -> str:
         i += 1
 
     rest = "\n".join(lines[i:])
+    # Avoid preformatted rendering caused by a leading space immediately after
+    # metadata directives (__NOTOC__/DISPLAYTITLE/Translation_status).
+    rest = rest.lstrip(" \t")
     if rest:
         return "".join(preamble) + rest
     return "".join(preamble)
@@ -908,6 +1083,8 @@ def main() -> None:
     parser.add_argument("--max-keys", type=int, default=None)
     parser.add_argument("--sleep-ms", type=int, default=200)
     parser.add_argument("--auto-approve", action="store_true")
+    parser.add_argument("--clear-fuzzy", action="store_true", default=True)
+    parser.add_argument("--no-clear-fuzzy", action="store_false", dest="clear_fuzzy")
     parser.add_argument("--approve-only", action="store_true", help="only approve assembled page")
     parser.add_argument("--retry-approve", action="store_true", help="retry approve if assembled page missing")
     parser.add_argument("--rebuild-only", action="store_true", help="use cached translations only; no MT calls")
@@ -1397,8 +1574,33 @@ def main() -> None:
             localized_display_by_target,
             known_langs=known_langs,
         )
+        restored = _restore_resource_row_preserve_fields(
+            seg.text,
+            restored,
+            cfg.resource_row_preserve_fields,
+        )
+        restored = _translate_resource_row_templates(
+            restored,
+            engine=engine,
+            source_lang=translate_source_lang,
+            target_lang=engine_lang,
+            glossary_id=glossary_id,
+            no_translate_terms=no_translate_terms,
+            termbase_entries=termbase_entries,
+            engine_lang=engine_lang,
+            preserve_fields=cfg.resource_row_preserve_fields,
+            translate_fields=cfg.resource_row_translate_fields,
+        )
         if termbase_entries:
             restored = _apply_termbase_safe(restored, termbase_entries)
+        # Termbase substitutions can still touch preserved ResourceRow fields
+        # (for example "5Rhythms" in title/creator). Re-apply preserved source
+        # values as a final guard.
+        restored = _restore_resource_row_preserve_fields(
+            seg.text,
+            restored,
+            cfg.resource_row_preserve_fields,
+        )
         restored = _strip_empty_paragraphs(restored)
         # Mark as fuzzy to indicate machine translation if enabled
         if args.fuzzy:
@@ -1549,6 +1751,29 @@ def main() -> None:
         if args.sleep_ms > 0:
             time.sleep(args.sleep_ms / 1000.0)
 
+    if args.clear_fuzzy and not args.dry_run and fuzzy_keys:
+        for key in sorted(fuzzy_keys, key=lambda x: int(x)):
+            unit_title = _unit_title(norm_title, key, args.lang)
+            try:
+                current_text, _, _ = client.get_page_wikitext(unit_title)
+            except Exception:
+                continue
+            toggled = _toggle_trailing_newline(current_text)
+            if toggled == current_text:
+                continue
+            try:
+                client.edit(
+                    unit_title,
+                    toggled,
+                    "Bot: clear fuzzy on machine translation",
+                    bot=True,
+                )
+                logging.getLogger("translate").info("cleared fuzzy %s", unit_title)
+            except Exception as exc:
+                logging.getLogger("translate").warning(
+                    "failed to clear fuzzy for %s: %s", unit_title, exc
+                )
+
     if (
         not args.dry_run
         and ordered_keys
@@ -1590,6 +1815,13 @@ def main() -> None:
         logging.getLogger("translate").info(
             "approved assembled page %s", assembled_title
         )
+        try:
+            client.purge(assembled_title, forcelinkupdate=True)
+            logging.getLogger("translate").info("purged %s", assembled_title)
+        except Exception as exc:
+            logging.getLogger("translate").warning(
+                "failed to purge %s: %s", assembled_title, exc
+            )
 
     if not args.dry_run:
         _write_ai_status_with_retry(
