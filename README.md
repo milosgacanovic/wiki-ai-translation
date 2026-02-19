@@ -233,6 +233,9 @@ Delta dry-run preview (no queue/process/cursor changes):
 wiki-translate-runner --poll-once --dry-run
 ```
 
+Dry-run also prints `existing_queued_jobs` and warns if backlog already exists,
+so you can avoid accidentally processing old queued work in the next real run.
+
 Delta dry-run plus missing-translation backfill preview:
 
 ```bash

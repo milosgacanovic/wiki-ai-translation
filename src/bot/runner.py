@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import hashlib
 
 from .config import load_config
 from .logging import configure_logging
@@ -20,6 +21,8 @@ from .scheduler import run_poll_loop, poll_recent_changes
 from .sync_translation_status import main as sync_translation_status_main
 from .state import get_ingest_cursor, set_ingest_cursor
 from .translate_page import main as translate_page_main
+from .tracker import upsert_page
+from .segmenter import split_translate_units
 from .run_report import (
     start_run,
     finish_run,
@@ -40,6 +43,99 @@ def _engine_lang_for(lang: str) -> str:
 def _recentchanges_cursor_name(cfg) -> str:
     langs = ",".join(sorted(set(cfg.target_langs)))
     return f"recentchanges:{langs}"
+
+
+def _recentchanges_cursor_name_for_lang(lang: str) -> str:
+    return f"recentchanges:{lang}"
+
+
+def _collect_poll_changes(
+    cfg,
+    client,
+    cursors: dict[str, str | None],
+    limit: int | None,
+) -> tuple[list, dict[str, str | None]]:
+    # Single-language mode keeps existing cursor behavior.
+    langs = sorted(set(cfg.target_langs))
+    if len(langs) <= 1:
+        cursor_name = _recentchanges_cursor_name(cfg)
+        since = cursors.get(cursor_name)
+        changes, new_since = poll_recent_changes(client, since, limit=limit)
+        return changes, {cursor_name: new_since}
+
+    # Multi-language mode: union recentchanges from each language cursor so
+    # "all languages" behaves as sum of individual language windows.
+    merged: dict[str, object] = {}
+    new_since_by_cursor: dict[str, str | None] = {}
+    for lang in langs:
+        cursor_name = _recentchanges_cursor_name_for_lang(lang)
+        since = cursors.get(cursor_name)
+        changes, new_since = poll_recent_changes(client, since, limit=limit)
+        new_since_by_cursor[cursor_name] = new_since
+        for change in changes:
+            current = merged.get(change.title)
+            if current is None or getattr(current, "timestamp", "") < change.timestamp:
+                merged[change.title] = change
+    out = list(merged.values())
+    out.sort(key=lambda c: (getattr(c, "timestamp", ""), getattr(c, "title", "")))
+    return out, new_since_by_cursor
+
+
+def _checksum(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _plan_page_segment_delta(cfg, client: MediaWikiClient, title: str) -> tuple[int, int] | None:
+    try:
+        source_wikitext, _rev_id, norm_title = client.get_page_wikitext(title)
+    except Exception:
+        return None
+
+    segments: list[tuple[str, str]] = []
+    unit_keys = client.list_translation_unit_keys(norm_title, cfg.source_lang)
+    if unit_keys:
+        for key in sorted(set(unit_keys), key=lambda k: int(k)):
+            unit_title = f"Translations:{norm_title}/{key}/{cfg.source_lang}"
+            try:
+                unit_text, _, _ = client.get_page_wikitext(unit_title)
+                segments.append((key, unit_text))
+            except Exception:
+                # If any unit fetch fails, fall back to parser-based segmentation.
+                segments = []
+                break
+
+    if not segments:
+        parsed = split_translate_units(source_wikitext)
+        dedup: dict[str, str] = {}
+        for seg in parsed:
+            dedup[seg.key] = seg.text
+        segments = sorted(dedup.items(), key=lambda kv: int(kv[0]))
+
+    total = len(segments)
+    if total == 0 or not cfg.pg_dsn:
+        return (total, total)
+
+    existing_checksums: dict[str, str] = {}
+    try:
+        from .db import fetch_segment_checksums
+
+        with get_conn(cfg.pg_dsn) as conn:
+            existing_checksums = fetch_segment_checksums(conn, norm_title)
+    except Exception:
+        existing_checksums = {}
+
+    if not existing_checksums:
+        return (total, total)
+
+    current_keys = {key for key, _ in segments}
+    if set(existing_checksums.keys()) != current_keys:
+        return (total, total)
+
+    changed = 0
+    for key, text in segments:
+        if existing_checksums.get(key) != _checksum(text):
+            changed += 1
+    return (changed, total)
 
 
 def process_queue(
@@ -94,15 +190,22 @@ def process_queue(
                     if rebuild_only:
                         sys.argv.append("--rebuild-only")
                     result = translate_page_main()
+                    result_status = None
+                    if isinstance(result, dict):
+                        result_status = str(result.get("status", "")).strip().lower()
+                    if isinstance(result, dict):
+                        page_title = str(result.get("title") or "").strip()
+                        source_rev = str(result.get("source_rev") or "").strip()
+                        if page_title and source_rev.isdigit() and result_status not in ("", "error"):
+                            upsert_page(conn, page_title, cfg.source_lang, int(source_rev))
                     if run_id is not None:
                         status = "ok"
                         message = None
                         if isinstance(result, dict):
-                            run_status = str(result.get("status", "")).strip().lower()
-                            if run_status.startswith("locked_"):
+                            if result_status and result_status.startswith("locked_"):
                                 status = "skip"
-                                message = run_status
-                            elif run_status == "outdated":
+                                message = result_status
+                            elif result_status == "outdated":
                                 status = "warning"
                                 message = "status changed to outdated"
                         log_item(conn, run_id, "translate", status, job.page_title, job.lang, message)
@@ -150,7 +253,19 @@ def main() -> None:
     parser.add_argument("--ingest-all", action="store_true", help="ingest all main namespace pages")
     parser.add_argument("--ingest-limit", type=int, default=None)
     parser.add_argument("--ingest-sleep-ms", type=int, default=0)
-    parser.add_argument("--force-retranslate", action="store_true", help="enqueue translations even if source unchanged")
+    parser.add_argument(
+        "--force-retranslate",
+        dest="force_retranslate",
+        action="store_true",
+        default=True,
+        help="enqueue translations even if source unchanged (default: on)",
+    )
+    parser.add_argument(
+        "--no-force-retranslate",
+        dest="force_retranslate",
+        action="store_false",
+        help="do not enqueue when source revision is unchanged",
+    )
     parser.add_argument("--max-keys", type=int, default=None, help="translate only first N segments per page")
     parser.add_argument("--run-all", action="store_true", help="ingest all then process queue")
     parser.add_argument(
@@ -334,10 +449,22 @@ def main() -> None:
     if args.poll_once:
         cursor_name = _recentchanges_cursor_name(cfg)
         if args.dry_run:
+            existing_queued = 0
+            cursors: dict[str, str | None] = {}
             with get_conn(cfg.pg_dsn) as conn:
-                since = get_ingest_cursor(conn, cursor_name)
-            changes, _new_since = poll_recent_changes(client, since, limit=args.poll_limit)
+                existing_queued = count_jobs(conn, status="queued", job_type="translate_page")
+                langs = sorted(set(cfg.target_langs))
+                if len(langs) <= 1:
+                    cursors[cursor_name] = get_ingest_cursor(conn, cursor_name)
+                else:
+                    for lang in langs:
+                        lang_cursor_name = _recentchanges_cursor_name_for_lang(lang)
+                        cursors[lang_cursor_name] = get_ingest_cursor(conn, lang_cursor_name)
+            changes, _new_since_by_cursor = _collect_poll_changes(
+                cfg, client, cursors, limit=args.poll_limit
+            )
             plan_pages: set[str] = set()
+            seen_titles: set[str] = set()
             with get_conn(cfg.pg_dsn) as conn:
                 def _record(
                     kind: str,
@@ -350,6 +477,9 @@ def main() -> None:
                         plan_pages.add(page_title)
 
                 for change in changes:
+                    if change.title in seen_titles:
+                        continue
+                    seen_titles.add(change.title)
                     ingest_title(
                         cfg,
                         client,
@@ -362,44 +492,86 @@ def main() -> None:
                     )
             print(f"would_process_changes={len(changes)}")
             print(f"would_queue_pages={len(plan_pages)}")
+            print(f"existing_queued_jobs={existing_queued}")
+            if existing_queued > 0:
+                print(
+                    "WARNING: queued translate_page jobs already exist; a normal --poll-once run will process them too."
+                )
             for title in sorted(plan_pages):
-                print(title)
+                stats = _plan_page_segment_delta(cfg, client, title)
+                if stats is None:
+                    print(f"{title} (reason=unknown)")
+                    continue
+                changed, total = stats
+                reason = "delta" if changed > 0 else "forced"
+                print(f"{title} ({changed}/{total}, reason={reason})")
             return
 
         run_id = None
-        with get_conn(cfg.pg_dsn) as conn:
-            run_id = start_run(conn, "poll-once", cfg)
-            since = get_ingest_cursor(conn, cursor_name)
-        changes, new_since = poll_recent_changes(client, since, limit=args.poll_limit)
-        if changes:
+        try:
+            cursors: dict[str, str | None] = {}
             with get_conn(cfg.pg_dsn) as conn:
-                for change in changes:
-                    try:
-                        ingest_title(
-                            cfg,
-                            client,
-                            conn,
-                            change.title,
-                            record=lambda *a, **k: None,
-                            enqueue_missing_when_unchanged=args.include_missing,
-                        )
-                        log_item(conn, run_id, "ingest", "ok", change.title, None, None)
-                    except Exception as exc:
-                        log_item(conn, run_id, "ingest", "error", change.title, None, str(exc))
-        with get_conn(cfg.pg_dsn) as conn:
-            set_ingest_cursor(conn, cursor_name, new_since)
-        with get_conn(cfg.pg_dsn) as conn:
-            total_jobs = count_jobs(conn, status="queued", job_type="translate_page")
-        progress = {"done": 0, "total": max(total_jobs, 1)}
-        while True:
+                run_id = start_run(conn, "poll-once", cfg)
+                langs = sorted(set(cfg.target_langs))
+                if len(langs) <= 1:
+                    cursors[cursor_name] = get_ingest_cursor(conn, cursor_name)
+                else:
+                    for lang in langs:
+                        lang_cursor_name = _recentchanges_cursor_name_for_lang(lang)
+                        cursors[lang_cursor_name] = get_ingest_cursor(conn, lang_cursor_name)
+            changes, new_since_by_cursor = _collect_poll_changes(
+                cfg, client, cursors, limit=args.poll_limit
+            )
+            if changes:
+                seen_titles: set[str] = set()
+                with get_conn(cfg.pg_dsn) as conn:
+                    for change in changes:
+                        if change.title in seen_titles:
+                            continue
+                        seen_titles.add(change.title)
+                        try:
+                            ingest_title(
+                                cfg,
+                                client,
+                                conn,
+                                change.title,
+                                record=lambda *a, **k: None,
+                                force=args.force_retranslate,
+                                enqueue_missing_when_unchanged=args.include_missing,
+                            )
+                            log_item(conn, run_id, "ingest", "ok", change.title, None, None)
+                        except Exception as exc:
+                            log_item(conn, run_id, "ingest", "error", change.title, None, str(exc))
             with get_conn(cfg.pg_dsn) as conn:
-                if not next_jobs(conn, limit=1):
-                    break
-            process_queue(cfg, client, run_id=run_id, progress=progress, max_keys=args.max_keys, no_cache=args.no_cache, rebuild_only=args.rebuild_only)
-        with get_conn(cfg.pg_dsn) as conn:
-            finish_run(conn, run_id, "done")
-            report_path = write_report_file(conn, run_id)
-        print(str(report_path))
+                total_jobs = count_jobs(conn, status="queued", job_type="translate_page")
+            progress = {"done": 0, "total": max(total_jobs, 1)}
+            while True:
+                with get_conn(cfg.pg_dsn) as conn:
+                    if not next_jobs(conn, limit=1):
+                        break
+                process_queue(
+                    cfg,
+                    client,
+                    run_id=run_id,
+                    progress=progress,
+                    max_keys=args.max_keys,
+                    no_cache=args.no_cache,
+                    rebuild_only=args.rebuild_only,
+                )
+            # Advance poll cursor only after successful completion.
+            with get_conn(cfg.pg_dsn) as conn:
+                for c_name, c_value in new_since_by_cursor.items():
+                    set_ingest_cursor(conn, c_name, c_value)
+                finish_run(conn, run_id, "done")
+                report_path = write_report_file(conn, run_id)
+            print(str(report_path))
+        except Exception as exc:
+            if run_id is not None:
+                with get_conn(cfg.pg_dsn) as conn:
+                    finish_run(conn, run_id, "error")
+                    log_item(conn, run_id, "run", "error", None, None, str(exc))
+                    write_report_file(conn, run_id)
+            raise
         return
 
     if args.poll:

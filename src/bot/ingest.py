@@ -6,7 +6,7 @@ import re
 
 from .config import Config
 from .mediawiki import MediaWikiClient, MediaWikiError
-from .tracker import upsert_page, get_page
+from .tracker import get_page
 from .jobs import enqueue_job
 from .state import get_ingest_cursor, set_ingest_cursor
 
@@ -108,8 +108,6 @@ def ingest_title(
 
     rev_id, norm_title = client.get_page_revision_id(title)
     page_record = get_page(conn, norm_title)
-    if not dry_run:
-        upsert_page(conn, norm_title, cfg.source_lang, rev_id)
 
     if should_skip_title(norm_title, cfg.skip_title_prefixes):
         log.info("skip translation for %s due to prefix rule", norm_title)
@@ -209,7 +207,6 @@ def ingest_title(
 
             new_rev_id, _ = client.get_page_revision_id(norm_title)
             rev_id = new_rev_id
-            upsert_page(conn, norm_title, cfg.source_lang, new_rev_id)
         else:
             _record("ok", "would wrap")
             would_queue = True

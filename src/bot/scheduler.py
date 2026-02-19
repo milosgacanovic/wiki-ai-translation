@@ -35,6 +35,8 @@ def poll_recent_changes(
             "rcprop": "title|ids|timestamp",
             "rctype": "edit|new",
             "rcshow": "!bot",
+            "rcnamespace": 0,
+            "rctoponly": 1,
             "rclimit": 50,
             "rcdir": "newer",
             **({"rcstart": since} if since else {}),

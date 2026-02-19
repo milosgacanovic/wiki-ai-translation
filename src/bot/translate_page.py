@@ -53,6 +53,7 @@ BROKEN_LINK_RE = re.compile(r"\[\[(?:__PH\d+__|__LINK\d+__)\|([^\]]+)\]\]")
 DISPLAYTITLE_RE = re.compile(r"\{\{\s*DISPLAYTITLE\s*:[^}]+\}\}", re.IGNORECASE)
 REF_TOKEN_RE = re.compile(r"<ref\b[^>]*>.*?</ref>|<ref\b[^>]*/\s*>", re.IGNORECASE | re.DOTALL)
 UNDER_DEVELOPMENT_RE = re.compile(r"\{\{\s*UnderDevelopment\s*\}\}", re.IGNORECASE)
+MAGIC_WORD_RE = re.compile(r"__([A-Z0-9_]+)__")
 DISCLAIMER_TABLE_RE = re.compile(
     r"\{\|\s*class=\"translation-disclaimer\".*?\|\}", re.DOTALL
 )
@@ -324,6 +325,19 @@ def _restore_underdevelopment_from_source(source: str, translated: str) -> str:
     if UNDER_DEVELOPMENT_RE.search(translated):
         return translated
     return f"{translated}\n{{{{UnderDevelopment}}}}"
+
+
+def _restore_magic_words_from_source(source: str, translated: str) -> str:
+    # Preserve MediaWiki magic words (for example __NOTOC__) if MT drops them.
+    source_words = {m.group(0) for m in MAGIC_WORD_RE.finditer(source)}
+    if not source_words:
+        return translated
+    out = translated
+    for word in sorted(source_words):
+        if word in out:
+            continue
+        out = f"{out}{word}"
+    return out
 
 
 def _missing_required_tokens(text: str, required_tokens: set[str]) -> set[str]:
@@ -1135,7 +1149,7 @@ def main() -> None:
     source_wikitext_en, rev_id, norm_title = client.get_page_wikitext(args.title)
     if _is_redirect_wikitext(source_wikitext_en):
         logging.getLogger("translate").info("skip redirect page: %s", norm_title)
-        return
+        return {"status": "skip_redirect", "title": norm_title, "source_rev": str(rev_id)}
     source_rev = str(rev_id)
     translated_page_title = f"{norm_title}/{args.lang}"
     ai_info: dict[str, object] = {}
@@ -1192,13 +1206,13 @@ def main() -> None:
                 logging.getLogger("translate").warning(
                     "failed to mark outdated for %s: %s", translated_page_title, exc
                 )
-            return {"status": "outdated"}
+            return {"status": "outdated", "title": norm_title, "source_rev": source_rev}
         logging.getLogger("translate").info(
             "status lock: skip translation for %s (status=%s)",
             translated_page_title,
             status,
         )
-        return {"status": f"locked_{status}"}
+        return {"status": f"locked_{status}", "title": norm_title, "source_rev": source_rev}
     segments = _fetch_messagecollection_segments(client, norm_title, cfg.source_lang)
     if not segments:
         unit_keys = client.list_translation_unit_keys(norm_title, cfg.source_lang)
@@ -1543,6 +1557,7 @@ def main() -> None:
                 restored = restored.replace(token, value)
         restored = _restore_missing_refs_from_source(seg.text, restored)
         restored = _restore_underdevelopment_from_source(seg.text, restored)
+        restored = _restore_magic_words_from_source(seg.text, restored)
         restored = _strip_accidental_preformat(seg.text, restored)
         restored = _restore_file_links(seg.text, restored)
         restored = _restore_html_tags(seg.text, restored)
@@ -1691,6 +1706,7 @@ def main() -> None:
         source_text = source_by_key.get(key, "")
         restored = _restore_missing_refs_from_source(source_text, restored)
         restored = _restore_underdevelopment_from_source(source_text, restored)
+        restored = _restore_magic_words_from_source(source_text, restored)
         restored = _strip_accidental_preformat(source_text, restored)
         restored = _restore_file_links(source_text, restored)
         restored = _restore_html_tags(source_text, restored)
@@ -1751,8 +1767,26 @@ def main() -> None:
         if args.sleep_ms > 0:
             time.sleep(args.sleep_ms / 1000.0)
 
-    if args.clear_fuzzy and not args.dry_run and fuzzy_keys:
-        for key in sorted(fuzzy_keys, key=lambda x: int(x)):
+    if args.clear_fuzzy and not args.dry_run:
+        # Re-fetch fuzzy status after edits because Translate may mark units fuzzy
+        # asynchronously after mark-for-translation; initial snapshot can miss them.
+        fuzzy_after: set[str] = set()
+        try:
+            lang_items = client.get_message_collection(
+                f"page-{norm_title}", args.lang, include_properties=True
+            )
+            for item in lang_items:
+                key = str(item.get("key", ""))
+                unit_key = key.split("/")[-1]
+                if not unit_key.isdigit():
+                    continue
+                props = item.get("properties") or {}
+                if str(props.get("status", "")).strip().lower() == "fuzzy":
+                    fuzzy_after.add(unit_key)
+        except Exception:
+            fuzzy_after = set()
+
+        for key in sorted(fuzzy_after, key=lambda x: int(x)):
             unit_title = _unit_title(norm_title, key, args.lang)
             try:
                 current_text, _, _ = client.get_page_wikitext(unit_title)
@@ -1810,7 +1844,7 @@ def main() -> None:
             logging.getLogger("translate").warning(
                 "skip approve: %s", exc
             )
-            return
+            return {"status": "skip_approve_no_revisions", "title": norm_title, "source_rev": source_rev}
         client.approve_revision(assembled_rev)
         logging.getLogger("translate").info(
             "approved assembled page %s", assembled_title
@@ -1832,6 +1866,8 @@ def main() -> None:
             source_title=norm_title,
             source_lang=cfg.source_lang,
         )
+
+    return {"status": "ok", "title": norm_title, "source_rev": source_rev}
 
 
 if __name__ == "__main__":

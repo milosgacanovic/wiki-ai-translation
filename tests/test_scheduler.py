@@ -37,6 +37,8 @@ def test_poll_recent_changes_paginates():
     assert [c.title for c in changes] == ["Page A", "Page B"]
     assert new_since == "2026-02-14T10:01:00Z"
     assert len(client.calls) == 2
+    assert client.calls[0][1]["rcnamespace"] == 0
+    assert client.calls[0][1]["rctoponly"] == 1
     # second call must include rccontinue to fetch the next batch
     assert client.calls[1][1]["rccontinue"] == "20260214100100|11"
 
