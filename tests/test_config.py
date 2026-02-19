@@ -24,7 +24,7 @@ def test_load_config_reads_values(monkeypatch):
     assert cfg.mw_api_url.endswith("api.php")
     assert cfg.target_langs == ("sr", "it")
     assert cfg.translate_mark_params == {"page": "{title}"}
-    assert cfg.resource_row_preserve_fields == ("title", "url", "creator")
+    assert cfg.resource_row_preserve_fields == ("title", "url", "creator", "creator_link")
     assert cfg.resource_row_translate_fields == ("year", "format", "access", "tags", "notes")
 
 

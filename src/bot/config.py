@@ -33,7 +33,12 @@ class Config:
     skip_title_prefixes: tuple[str, ...] = ()
     skip_translation_subpages: bool = True
     pivot_reviewed_map: dict[str, str] | None = None
-    resource_row_preserve_fields: tuple[str, ...] = ("title", "url", "creator")
+    resource_row_preserve_fields: tuple[str, ...] = (
+        "title",
+        "url",
+        "creator",
+        "creator_link",
+    )
     resource_row_translate_fields: tuple[str, ...] = (
         "year",
         "format",
@@ -41,6 +46,7 @@ class Config:
         "tags",
         "notes",
     )
+    cache_strict_templates: tuple[str, ...] = ()
 
 
 def load_config() -> Config:
@@ -107,6 +113,17 @@ def load_config() -> Config:
                 items.append(part)
         return tuple(items)
 
+    def _load_template_names(var_name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+        raw = os.getenv(var_name)
+        if raw is None:
+            return default
+        names = []
+        for part in raw.split(","):
+            part = part.strip()
+            if part:
+                names.append(part)
+        return tuple(names)
+
     def req(name: str) -> str:
         value = os.getenv(name)
         if not value:
@@ -144,11 +161,16 @@ def load_config() -> Config:
         not in ("0", "false", "False"),
         pivot_reviewed_map=_load_pivot_reviewed_map(),
         resource_row_preserve_fields=_load_csv_fields(
-            "BOT_RESOURCE_ROW_PRESERVE_FIELDS", ("title", "url", "creator")
+            "BOT_RESOURCE_ROW_PRESERVE_FIELDS",
+            ("title", "url", "creator", "creator_link"),
         ),
         resource_row_translate_fields=_load_csv_fields(
             "BOT_RESOURCE_ROW_TRANSLATE_FIELDS",
             ("year", "format", "access", "tags", "notes"),
+        ),
+        cache_strict_templates=_load_template_names(
+            "BOT_CACHE_STRICT_TEMPLATES",
+            (),
         ),
     )
     return cfg

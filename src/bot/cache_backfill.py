@@ -84,8 +84,10 @@ def main() -> None:
             if not source_defs:
                 continue
             with get_conn(cfg.pg_dsn) as conn:
+                checksum_by_key: dict[str, str] = {}
                 for key, source_text in source_defs.items():
                     checksum = _checksum(source_text)
+                    checksum_by_key[key] = checksum
                     upsert_segment(conn, title, key, source_text, checksum)
                 for lang in langs:
                     try:
@@ -94,7 +96,12 @@ def main() -> None:
                         continue
                     for key, text in trans.items():
                         segment_key = f"{title}::{key}"
-                        upsert_translation(conn, segment_key, lang, text, "backfill")
+                        source_checksum = checksum_by_key.get(key)
+                        if not source_checksum:
+                            continue
+                        upsert_translation(
+                            conn, segment_key, lang, text, "backfill", source_checksum
+                        )
             processed += 1
             if args.limit_pages is not None and processed >= args.limit_pages:
                 return

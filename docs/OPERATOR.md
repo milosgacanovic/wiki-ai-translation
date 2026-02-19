@@ -40,6 +40,7 @@ Recommended standard pipeline (most common production mode):
 7. Cache has two levels: exact page-unit key and content checksum fallback (cross-page reuse).
 8. Fuzzy units are auto-refreshed: if a unit is marked `fuzzy`, the bot forces a harmless unit edit so Translate clears the `needs update` state.
 9. If unit keys change after mark-for-translation (split/merge/reorder), cache is bypassed for that page for the current run to avoid stale-context reuse.
+10. Unit edit guard: after every unit edit, the bot re-reads the unit and verifies persisted content/revision (with Unicode canonical-equivalence normalization for scripts with combining marks, e.g. Hebrew niqqud); on mismatch it auto-retries once, then fails the run.
 
 Editor-safe source rules:
 - Edit only inside `<translate>...</translate>`.

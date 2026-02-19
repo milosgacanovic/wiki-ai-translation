@@ -187,6 +187,9 @@ Cache lookup strategy:
 - L1: exact page-unit key (`page_title::segment_key`) when source checksum for that unit is unchanged.
 - L2: content checksum fallback (cross-page). If unit keys changed (for example after re-marking),
   the bot reuses any existing translation with the same source checksum + target language.
+- Cache compatibility guard for structural templates is configurable via
+  `BOT_CACHE_STRICT_TEMPLATES` (comma-separated template names; empty by default).
+  If one of these templates differs between source and cached unit, cache is bypassed for that unit.
 - Use `--no-cache` to force MT when glossary/style changes require fresh translations.
 
 Backfill the cache from existing Translate units (no MT calls):
@@ -456,13 +459,16 @@ BOT_GCP_GLOSSARIES={"sr":"dr-sr-glossary"}
 
 ## ResourceRow Template Translation Rules
 `{{ResourceRow ...}}` is handled with field-level rules:
-- `title`, `url`, and `creator` are preserved by default (not translated).
+- `title`, `url`, `creator`, and `creator_link` are preserved by default (not translated).
 - `year`, `format`, `access`, `tags`, `notes` are translated by default.
+- For internal wiki targets in ResourceRow:
+  - `url` values under the same wiki host are localized with `/{lang}` suffix.
+  - `creator_link` page titles are localized with `/{lang}` suffix.
 
 You can override this in `.env`:
 
 ```bash
-BOT_RESOURCE_ROW_PRESERVE_FIELDS=title,url,creator
+BOT_RESOURCE_ROW_PRESERVE_FIELDS=title,url,creator,creator_link
 BOT_RESOURCE_ROW_TRANSLATE_FIELDS=year,format,access,tags,notes
 ```
 

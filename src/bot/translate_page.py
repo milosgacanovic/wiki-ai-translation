@@ -6,6 +6,9 @@ import logging
 import time
 import re
 import hashlib
+import difflib
+import unicodedata
+from urllib.parse import urlparse, urlunparse
 
 from .config import load_config
 from .db import (
@@ -88,6 +91,101 @@ def _strip_known_lang_suffix(page: str, known_langs: set[str]) -> str:
 
 def _normalize_param_key(name: str) -> str:
     return re.sub(r"[\s_]+", "", name).strip().lower()
+
+
+def _append_lang_suffix_to_internal_page(
+    page: str, lang: str, known_langs: set[str] | None = None
+) -> str:
+    known_langs = known_langs or set()
+    page = page.strip()
+    if not page:
+        return page
+    if ":" in page:
+        # Namespaced/special links are left untouched.
+        return page
+    base_page = _strip_known_lang_suffix(page, known_langs)
+    if page.endswith(f"/{lang}"):
+        return page
+    return f"{base_page}/{lang}"
+
+
+def _append_lang_suffix_to_internal_url(url: str, lang: str, mw_api_url: str) -> str:
+    raw = url.strip()
+    if not raw:
+        return url
+    try:
+        parsed = urlparse(raw)
+        api_parsed = urlparse(mw_api_url)
+    except Exception:
+        return url
+    if parsed.scheme not in ("http", "https"):
+        return url
+    if not api_parsed.netloc or parsed.netloc != api_parsed.netloc:
+        return url
+    if parsed.query or parsed.fragment:
+        return url
+    path = parsed.path.rstrip("/")
+    if not path or path.endswith(f"/{lang}") or path.endswith("/api.php"):
+        return url
+    new_path = f"{path}/{lang}"
+    rebuilt = urlunparse((parsed.scheme, parsed.netloc, new_path, "", "", ""))
+    lead = re.match(r"^\s*", url).group(0)
+    trail = re.search(r"\s*$", url).group(0)
+    return f"{lead}{rebuilt}{trail}"
+
+
+def _localize_resource_row_internal_targets(
+    text: str,
+    *,
+    lang: str,
+    mw_api_url: str,
+    known_langs: set[str] | None = None,
+) -> str:
+    if "{{" not in text:
+        return text
+    known_langs = known_langs or set()
+    out: list[str] = []
+    pos = 0
+    while True:
+        m = RESOURCE_ROW_START_RE.search(text, pos)
+        if not m:
+            out.append(text[pos:])
+            break
+        start = m.start()
+        end = _find_balanced_template_end(text, start)
+        if end is None:
+            out.append(text[pos:])
+            break
+        out.append(text[pos:start])
+        tpl = text[start:end]
+        body = tpl[:-2]
+        matches = list(RESOURCE_ROW_PARAM_RE.finditer(body))
+        if not matches:
+            out.append(tpl)
+            pos = end
+            continue
+        rebuilt_parts: list[str] = []
+        cursor = 0
+        for idx, pm in enumerate(matches):
+            value_start = pm.end()
+            value_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
+            rebuilt_parts.append(body[cursor:value_start])
+            key = _normalize_param_key(pm.group(2))
+            value = body[value_start:value_end]
+            if key == "url":
+                value = _append_lang_suffix_to_internal_url(value, lang, mw_api_url)
+            elif key == "creatorlink":
+                lead = re.match(r"^\s*", value).group(0)
+                trail = re.search(r"\s*$", value).group(0)
+                core = value.strip()
+                localized = _append_lang_suffix_to_internal_page(core, lang, known_langs=known_langs)
+                value = f"{lead}{localized}{trail}"
+            rebuilt_parts.append(value)
+            cursor = value_end
+        rebuilt_parts.append(body[cursor:])
+        out.append("".join(rebuilt_parts) + "}}")
+        pos = end
+    return "".join(out)
 
 
 def _find_balanced_template_end(text: str, start: int) -> int | None:
@@ -325,6 +423,28 @@ def _restore_underdevelopment_from_source(source: str, translated: str) -> str:
     if UNDER_DEVELOPMENT_RE.search(translated):
         return translated
     return f"{translated}\n{{{{UnderDevelopment}}}}"
+
+
+def _has_template(text: str, template_name: str) -> bool:
+    if not template_name.strip():
+        return False
+    # Allow underscores/spaces in both source and configured template names.
+    token = re.escape(template_name.strip()).replace(r"\ ", r"[ _]+")
+    pattern = re.compile(r"\{\{\s*" + token + r"\b", re.IGNORECASE)
+    return bool(pattern.search(text))
+
+
+def _cache_compatible_with_source(
+    source: str,
+    cached: str,
+    strict_templates: tuple[str, ...],
+) -> bool:
+    # Keep cache strict for structural templates that must mirror source.
+    # Configurable by BOT_CACHE_STRICT_TEMPLATES (comma-separated names).
+    for template_name in strict_templates:
+        if _has_template(source, template_name) != _has_template(cached, template_name):
+            return False
+    return True
 
 
 def _restore_magic_words_from_source(source: str, translated: str) -> str:
@@ -709,6 +829,13 @@ def _toggle_trailing_newline(text: str) -> str:
     if text.endswith("\n"):
         return text.rstrip("\n")
     return text + "\n"
+
+
+def _normalized_text_equivalent(text: str) -> str:
+    # MediaWiki can normalize Unicode combining marks on save (for example
+    # Hebrew niqqud order). Compare canonicalized text to avoid false mismatches.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return unicodedata.normalize("NFC", text).strip()
 
 
 def _fix_broken_links(text: str, lang: str) -> str:
@@ -1340,16 +1467,35 @@ def main() -> None:
                     cached = None
                     # L1: exact page/key cache hit when unit map is stable.
                     if existing_checksums.get(seg.key) == checksum:
-                        cached = fetch_cached_translation(conn, f"{norm_title}::{seg.key}", args.lang)
+                        cached = fetch_cached_translation(
+                            conn, f"{norm_title}::{seg.key}", args.lang, checksum
+                        )
                         if cached:
-                            cached_by_key[seg.key] = cached
-                            cached_source_by_key[seg.key] = "db-key"
-                            continue
+                            if _cache_compatible_with_source(
+                                seg.text, cached, cfg.cache_strict_templates
+                            ):
+                                cached_by_key[seg.key] = cached
+                                cached_source_by_key[seg.key] = "db-key"
+                                continue
+                            logging.getLogger("translate").info(
+                                "cache incompatible %s key=%s source=db-key; bypassing cache",
+                                norm_title,
+                                seg.key,
+                            )
                     # L2: cross-page content cache hit by source checksum.
                     cached = fetch_cached_translation_by_checksum(conn, checksum, args.lang)
                 if cached:
-                    cached_by_key[seg.key] = cached
-                    cached_source_by_key[seg.key] = "db-checksum"
+                    if _cache_compatible_with_source(
+                        seg.text, cached, cfg.cache_strict_templates
+                    ):
+                        cached_by_key[seg.key] = cached
+                        cached_source_by_key[seg.key] = "db-checksum"
+                    else:
+                        logging.getLogger("translate").info(
+                            "cache incompatible %s key=%s source=db-checksum; bypassing cache",
+                            norm_title,
+                            seg.key,
+                        )
             except Exception:
                 pass
         if args.rebuild_only and seg.key not in cached_by_key:
@@ -1357,8 +1503,17 @@ def main() -> None:
             try:
                 unit_text, _, _ = client.get_page_wikitext(unit_title)
                 if unit_text.strip():
-                    cached_by_key[seg.key] = unit_text
-                    cached_source_by_key[seg.key] = "wiki"
+                    if _cache_compatible_with_source(
+                        seg.text, unit_text, cfg.cache_strict_templates
+                    ):
+                        cached_by_key[seg.key] = unit_text
+                        cached_source_by_key[seg.key] = "wiki"
+                    else:
+                        logging.getLogger("translate").info(
+                            "cache incompatible %s key=%s source=wiki; bypassing cache",
+                            norm_title,
+                            seg.key,
+                        )
             except MediaWikiError:
                 pass
 
@@ -1594,6 +1749,12 @@ def main() -> None:
             restored,
             cfg.resource_row_preserve_fields,
         )
+        restored = _localize_resource_row_internal_targets(
+            restored,
+            lang=args.lang,
+            mw_api_url=cfg.mw_api_url,
+            known_langs=known_langs,
+        )
         restored = _translate_resource_row_templates(
             restored,
             engine=engine,
@@ -1615,6 +1776,12 @@ def main() -> None:
             seg.text,
             restored,
             cfg.resource_row_preserve_fields,
+        )
+        restored = _localize_resource_row_internal_targets(
+            restored,
+            lang=args.lang,
+            mw_api_url=cfg.mw_api_url,
+            known_langs=known_langs,
         )
         restored = _strip_empty_paragraphs(restored)
         # Mark as fuzzy to indicate machine translation if enabled
@@ -1731,9 +1898,10 @@ def main() -> None:
             logging.getLogger("translate").info("DRY RUN edit %s", unit_title)
             continue
 
+        current_revid_before = 0
         try:
-            current_text, _, _ = client.get_page_wikitext(unit_title)
-            if current_text.strip() == restored.strip():
+            current_text, current_revid_before, _ = client.get_page_wikitext(unit_title)
+            if _normalized_text_equivalent(current_text) == _normalized_text_equivalent(restored):
                 if key in fuzzy_keys:
                     # Force a harmless edit to clear fuzzy state for this unit.
                     restored = _toggle_trailing_newline(current_text)
@@ -1744,7 +1912,68 @@ def main() -> None:
             # Unit might not exist yet; continue with edit.
             pass
 
-        newrev = client.edit(unit_title, restored, summary, bot=True)
+        unit_saved = False
+        last_verify_error: Exception | None = None
+        for attempt in range(2):
+            newrev = client.edit(unit_title, restored, summary, bot=True)
+            verify_revid = 0
+            try:
+                verify_text, verify_revid, _ = client.get_page_wikitext(unit_title)
+                last_verify_error = None
+            except Exception as exc:
+                verify_text = ""
+                last_verify_error = exc
+            if (
+                last_verify_error is None
+                and _normalized_text_equivalent(verify_text)
+                == _normalized_text_equivalent(restored)
+            ):
+                # If edit API did not return newrevid and rev did not change,
+                # treat this as a no-op success (already at desired content).
+                # Some MediaWiki installs can report Success without a new rev.
+                if newrev == 0 and verify_revid == current_revid_before:
+                    unit_saved = True
+                    break
+                unit_saved = True
+                break
+            else:
+                if last_verify_error is not None:
+                    logging.getLogger("translate").warning(
+                        "edit verify read failed for %s (attempt %d/2): %s",
+                        unit_title,
+                        attempt + 1,
+                        last_verify_error,
+                    )
+                else:
+                    diff = "\n".join(
+                        difflib.unified_diff(
+                            restored.splitlines(),
+                            verify_text.splitlines(),
+                            fromfile="expected",
+                            tofile="saved",
+                            lineterm="",
+                            n=1,
+                        )
+                    )
+                    if diff:
+                        logging.getLogger("translate").warning(
+                            "edit verify diff for %s (attempt %d/2):\n%s",
+                            unit_title,
+                            attempt + 1,
+                            diff[:2500],
+                        )
+                    logging.getLogger("translate").warning(
+                        "edit verify mismatch for %s (attempt %d/2); retrying",
+                        unit_title,
+                        attempt + 1,
+                    )
+            time.sleep(0.25)
+
+        if not unit_saved:
+            raise RuntimeError(
+                f"failed to verify persisted unit edit for {unit_title}"
+            )
+
         logging.getLogger("translate").info("edited %s", unit_title)
         if args.auto_review and newrev:
             client.translation_review(newrev)
@@ -1761,7 +1990,14 @@ def main() -> None:
                     )
                     segment_key = f"{norm_title}::{key}"
                     engine_used = cached_source_by_key.get(key, cfg.mt_primary)
-                    upsert_translation(conn, segment_key, args.lang, restored, engine_used)
+                    upsert_translation(
+                        conn,
+                        segment_key,
+                        args.lang,
+                        restored,
+                        engine_used,
+                        segment_checksums.get(key, _checksum(source_text)),
+                    )
             except Exception:
                 pass
         if args.sleep_ms > 0:

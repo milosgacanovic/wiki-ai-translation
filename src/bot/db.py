@@ -90,16 +90,18 @@ def upsert_segment(
 
 
 def fetch_cached_translation(
-    conn: psycopg.Connection, segment_key: str, lang: str
+    conn: psycopg.Connection, segment_key: str, lang: str, source_checksum: str
 ) -> str | None:
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT text
             FROM translations
-            WHERE segment_key = %s AND lang = %s
+            WHERE segment_key = %s
+              AND lang = %s
+              AND source_checksum = %s
             """,
-            (segment_key, lang),
+            (segment_key, lang, source_checksum),
         )
         row = cur.fetchone()
     if not row:
@@ -113,13 +115,11 @@ def fetch_cached_translation_by_checksum(
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT t.text
-            FROM segments s
-            JOIN translations t
-              ON t.segment_key = (s.page_title || '::' || s.segment_key)
-            WHERE s.checksum = %s
-              AND t.lang = %s
-            ORDER BY t.created_at DESC
+            SELECT text
+            FROM translations
+            WHERE source_checksum = %s
+              AND lang = %s
+            ORDER BY created_at DESC
             LIMIT 1
             """,
             (checksum, lang),
@@ -136,14 +136,18 @@ def upsert_translation(
     lang: str,
     text: str,
     engine: str,
+    source_checksum: str,
 ) -> None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO translations (segment_key, lang, text, engine)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO translations (segment_key, lang, text, engine, source_checksum)
+            VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (segment_key, lang)
-            DO UPDATE SET text = EXCLUDED.text, engine = EXCLUDED.engine
+            DO UPDATE SET
+              text = EXCLUDED.text,
+              engine = EXCLUDED.engine,
+              source_checksum = EXCLUDED.source_checksum
             """,
-            (segment_key, lang, text, engine),
+            (segment_key, lang, text, engine, source_checksum),
         )

@@ -20,6 +20,7 @@ from bot.translate_page import (
     _restore_category_namespace,
     _translate_resource_row_templates,
     _restore_resource_row_preserve_fields,
+    _localize_resource_row_internal_targets,
 )
 from bot.segmenter import Segment
 
@@ -271,3 +272,42 @@ def test_restore_resource_row_preserve_fields_restores_source_values():
     assert "| url = https://example.org/x" in out
     assert "| creator = Jane Doe" in out
     assert "| notes = Prevedena beleška" in out
+
+
+def test_localize_resource_row_internal_targets_for_url_and_creator_link():
+    source = (
+        "{{ResourceRow\n"
+        "| url = https://wiki.danceresource.org/Conscious_Dance_Practices/InnerMotion/The_Guidebook\n"
+        "| creator_link = Milos_Gacanovic\n"
+        "| notes = Keep me\n"
+        "}}"
+    )
+    out = _localize_resource_row_internal_targets(
+        source,
+        lang="sr",
+        mw_api_url="https://wiki.danceresource.org/api.php",
+        known_langs={"en", "sr", "de"},
+    )
+    assert (
+        "| url = https://wiki.danceresource.org/Conscious_Dance_Practices/InnerMotion/The_Guidebook/sr"
+        in out
+    )
+    assert "| creator_link = Milos_Gacanovic/sr" in out
+    assert "| notes = Keep me" in out
+
+
+def test_localize_resource_row_internal_targets_keeps_external_url():
+    source = (
+        "{{ResourceRow\n"
+        "| url = https://example.org/some/path\n"
+        "| creator_link = Milos_Gacanovic/de\n"
+        "}}"
+    )
+    out = _localize_resource_row_internal_targets(
+        source,
+        lang="sr",
+        mw_api_url="https://wiki.danceresource.org/api.php",
+        known_langs={"en", "sr", "de"},
+    )
+    assert "| url = https://example.org/some/path" in out
+    assert "| creator_link = Milos_Gacanovic/sr" in out
