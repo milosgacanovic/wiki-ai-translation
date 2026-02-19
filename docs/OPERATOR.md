@@ -57,6 +57,8 @@ Important:
   `wiki-translate-runner --poll-once --dry-run`
 - `--plan` is kept as a compatibility alias for `--dry-run` with `--poll-once`.
 - `--poll-once` paginates recent changes (50-per-request API pages) and processes all available batches in one run.
+- `--poll-once` is strict delta by default (changed source pages only).
+- Add `--include-missing` only when you intentionally want missing-translation backfill mixed into poll runs.
 - Use `--poll-limit N` to cap how many recentchanges entries are processed in one poll cycle.
 
 ## Translation Status

@@ -224,11 +224,19 @@ wiki-translate-runner --poll-once
 Use `--poll-limit N` to cap how many recent changes are processed in one run.
 Recentchanges cursor is scoped by current `BOT_TARGET_LANGS`, so polling with one language
 does not consume events for other language sets.
+By default, `--poll-once` is strict delta: it only queues pages with changed source revisions.
+If you also want unchanged pages that are missing a language translation, add `--include-missing`.
 
 Delta dry-run preview (no queue/process/cursor changes):
 
 ```bash
 wiki-translate-runner --poll-once --dry-run
+```
+
+Delta dry-run plus missing-translation backfill preview:
+
+```bash
+wiki-translate-runner --poll-once --dry-run --include-missing
 ```
 
 Compatibility alias:

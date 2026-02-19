@@ -175,6 +175,11 @@ def main() -> None:
     parser.add_argument("--poll-once", action="store_true", help="process recentchanges once and exit")
     parser.add_argument("--poll", action="store_true", help="run recentchanges poller")
     parser.add_argument(
+        "--include-missing",
+        action="store_true",
+        help="with --poll-once, also queue missing translations for unchanged source pages",
+    )
+    parser.add_argument(
         "--poll-limit",
         type=int,
         default=None,
@@ -353,6 +358,7 @@ def main() -> None:
                         record=_record,
                         force=args.force_retranslate,
                         dry_run=True,
+                        enqueue_missing_when_unchanged=args.include_missing,
                     )
             print(f"would_process_changes={len(changes)}")
             print(f"would_queue_pages={len(plan_pages)}")
@@ -369,7 +375,14 @@ def main() -> None:
             with get_conn(cfg.pg_dsn) as conn:
                 for change in changes:
                     try:
-                        ingest_title(cfg, client, conn, change.title, record=lambda *a, **k: None)
+                        ingest_title(
+                            cfg,
+                            client,
+                            conn,
+                            change.title,
+                            record=lambda *a, **k: None,
+                            enqueue_missing_when_unchanged=args.include_missing,
+                        )
                         log_item(conn, run_id, "ingest", "ok", change.title, None, None)
                     except Exception as exc:
                         log_item(conn, run_id, "ingest", "error", change.title, None, str(exc))

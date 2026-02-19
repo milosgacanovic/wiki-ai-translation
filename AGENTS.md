@@ -79,5 +79,6 @@ You are Codex, implementing a server-side translation bot for https://wiki.dance
 - Standard delta run: `wiki-translate-runner --poll-once`
 - Delta preview only (no queue/process/cursor writes): `wiki-translate-runner --poll-once --dry-run`
 - Compatibility alias: `wiki-translate-runner --poll-once --plan`
+- Include unchanged pages that are missing translations: `wiki-translate-runner --poll-once --include-missing`
 - Queue maintenance: `wiki-translate-runner --clear-queue`
 - `--clear-queue` must not be combined with `--dry-run`.

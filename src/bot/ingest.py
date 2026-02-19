@@ -93,6 +93,7 @@ def ingest_title(
     record=None,
     force: bool = False,
     dry_run: bool = False,
+    enqueue_missing_when_unchanged: bool = True,
 ) -> None:
     record_cb = record
     would_queue = False
@@ -123,6 +124,9 @@ def ingest_title(
     if unit_keys:
         source_changed = not page_record or page_record.last_source_rev != rev_id
         if not force and page_record and page_record.last_source_rev == rev_id:
+            if not enqueue_missing_when_unchanged:
+                _record("skip", "units exist; no source changes")
+                return
             if dry_run:
                 queued = 0
                 group_id = f"page-{norm_title}"
