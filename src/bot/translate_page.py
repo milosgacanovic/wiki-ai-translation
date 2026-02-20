@@ -404,6 +404,12 @@ def _strip_unresolved_placeholders(text: str) -> str:
     return UNRESOLVED_PLACEHOLDER_RE.sub("", text)
 
 
+def _is_nonlinguistic_segment(text: str) -> bool:
+    # Treat markup-only/structural units as copy-through to avoid unnecessary MT calls.
+    # Source language is English, so ASCII letters are a sufficient prose signal.
+    return re.search(r"[A-Za-z]", text) is None
+
+
 def _restore_missing_refs_from_source(source: str, translated: str) -> str:
     # MT can occasionally drop <ref> blocks; enforce source ref preservation.
     refs = REF_TOKEN_RE.findall(source)
@@ -1424,6 +1430,7 @@ def main() -> None:
     cached_source_by_key: dict[str, str] = {}
     existing_checksums: dict[str, str] = {}
     fuzzy_keys: set[str] = set()
+    untranslated_keys: set[str] = set()
     try:
         lang_items = client.get_message_collection(
             f"page-{norm_title}", args.lang, include_properties=True
@@ -1434,10 +1441,14 @@ def main() -> None:
             if not unit_key.isdigit():
                 continue
             props = item.get("properties") or {}
-            if str(props.get("status", "")).strip().lower() == "fuzzy":
+            item_status = str(props.get("status", "")).strip().lower()
+            if item_status == "fuzzy":
                 fuzzy_keys.add(unit_key)
+            if item_status == "untranslated":
+                untranslated_keys.add(unit_key)
     except Exception:
         fuzzy_keys = set()
+        untranslated_keys = set()
     disable_cache = False
     if cfg.pg_dsn and not args.no_cache:
         try:
@@ -1457,6 +1468,10 @@ def main() -> None:
     for seg in segments:
         checksum = _checksum(seg.text)
         segment_checksums[seg.key] = checksum
+        if _is_nonlinguistic_segment(seg.text):
+            cached_by_key[seg.key] = seg.text
+            cached_source_by_key[seg.key] = "source-copy"
+            continue
         if disable_cache:
             # Unit map changed after re-marking (keys added/removed/split/merged).
             # Skip checksum cache for this run to avoid reusing stale context.
@@ -1671,6 +1686,9 @@ def main() -> None:
         writable_keys = set(to_translate_keys)
         writable_keys.add(metadata_key)
     writable_keys.update(fuzzy_keys)
+    # If Translate reports untranslated units, always write them in this run,
+    # even if cache says "unchanged" for the source checksum.
+    writable_keys.update(untranslated_keys)
     for seg in segments:
         if seg.key in cached_by_key:
             # Keep cached unit text verbatim in delta mode. This prevents churn where

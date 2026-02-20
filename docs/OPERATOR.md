@@ -21,6 +21,7 @@
 ## Runtime
 - The bot runs continuously, polling recent changes and processing jobs.
 - Logs to stdout.
+- For each `--poll-once` / `--run-all` / `--retry-approve` run, a raw per-run log file is also written to `docs/runs/raw/`.
 - Backfill via `wiki-translate-runner --ingest-all` (main namespace only).
 - Full run (ingest + translate queue) via `wiki-translate-runner --run-all` (writes a report).
 - Reports are written to `docs/runs/`.
@@ -41,6 +42,8 @@ Recommended standard pipeline (most common production mode):
 8. Fuzzy units are auto-refreshed: if a unit is marked `fuzzy`, the bot forces a harmless unit edit so Translate clears the `needs update` state.
 9. If unit keys change after mark-for-translation (split/merge/reorder), cache is bypassed for that page for the current run to avoid stale-context reuse.
 10. Unit edit guard: after every unit edit, the bot re-reads the unit and verifies persisted content/revision (with Unicode canonical-equivalence normalization for scripts with combining marks, e.g. Hebrew niqqud); on mismatch it auto-retries once, then fails the run.
+11. If Translate reports a unit as `untranslated`, that unit is always rewritten in the current language run (even when cache says unchanged), preventing silent segment holes.
+12. Structural/non-linguistic segments (no prose letters) are copied through without MT calls.
 
 Editor-safe source rules:
 - Edit only inside `<translate>...</translate>`.
@@ -61,6 +64,7 @@ Important:
 - `--poll-once` is strict delta by default (changed source pages only).
 - Add `--include-missing` only when you intentionally want missing-translation backfill mixed into poll runs.
 - Use `--poll-limit N` to cap how many recentchanges entries are processed in one poll cycle.
+- At startup, stale runs left in `running` state (for example interrupted containers) are auto-closed as `interrupted` and report files are generated for them.
 
 ## Translation Status
 The bot stores translation state using `{{Translation_status}}` in the first source translation unit key (not always `1`).

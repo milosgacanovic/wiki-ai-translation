@@ -51,6 +51,32 @@ def finish_run(conn, run_id: int, status: str) -> None:
         )
 
 
+def close_stale_running_runs(conn) -> list[int]:
+    stale_ids: list[int] = []
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id
+            FROM translation_runs
+            WHERE status = 'running'
+            ORDER BY id ASC
+            """
+        )
+        stale_ids = [int(row[0]) for row in cur.fetchall()]
+    for run_id in stale_ids:
+        finish_run(conn, run_id, "interrupted")
+        log_item(
+            conn,
+            run_id,
+            "run",
+            "warning",
+            None,
+            None,
+            "auto-closed stale running run as interrupted",
+        )
+    return stale_ids
+
+
 def log_item(
     conn,
     run_id: int,
@@ -209,6 +235,29 @@ def fetch_translated_source_pages(conn, run_id: int) -> list[str]:
     return [str(r[0]) for r in rows]
 
 
+def fetch_run_notes(conn, run_id: int) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT status, message
+            FROM run_items
+            WHERE run_id = %s
+              AND kind = 'run'
+              AND message IS NOT NULL
+            ORDER BY id ASC
+            """,
+            (run_id,),
+        )
+        rows = cur.fetchall()
+    out: list[str] = []
+    for status, message in rows:
+        msg = str(message).strip()
+        if not msg:
+            continue
+        out.append(f"{status}: {msg}")
+    return out
+
+
 def _wiki_base_url() -> str:
     api = os.getenv("MW_API_URL", "").strip()
     if api:
@@ -308,6 +357,7 @@ def write_report_file(conn, run_id: int, directory: str = "docs/runs") -> Path:
     stats = fetch_stats(conn, run_id)
     items = fetch_items_by_status(conn, run_id)
     source_pages = fetch_translated_source_pages(conn, run_id)
+    run_notes = fetch_run_notes(conn, run_id)
     base_url = _wiki_base_url()
 
     Path(directory).mkdir(parents=True, exist_ok=True)
@@ -324,6 +374,13 @@ def write_report_file(conn, run_id: int, directory: str = "docs/runs") -> Path:
     lines.append(f"- target_langs: {summary.target_langs}")
     lines.append(f"- skip_title_prefixes: {summary.skip_title_prefixes}")
     lines.append(f"- disclaimer_marker: {summary.disclaimer_marker}")
+    lines.append("")
+    lines.append("## Run Notes")
+    if not run_notes:
+        lines.append("- none")
+    else:
+        for note in run_notes:
+            lines.append(f"- {note}")
     lines.append("")
     lines.append("## Totals")
     for key in sorted(summary.totals.keys()):

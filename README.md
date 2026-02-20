@@ -142,6 +142,8 @@ wiki-translate-runner --run-all
 ```
 
 Reports are written to `docs/runs/`.
+Raw run logs are written to `docs/runs/raw/` and referenced in each run report.
+If older runs are left in `running` state (for example interrupted container), the next runner start auto-closes them as `interrupted` and writes their reports.
 Generated one-off analysis outputs should go to `docs/generated/`.
 
 Print last run summary (JSON):
@@ -229,6 +231,7 @@ Recentchanges cursor is scoped by current `BOT_TARGET_LANGS`, so polling with on
 does not consume events for other language sets.
 By default, `--poll-once` is strict delta: it only queues pages with changed source revisions.
 If you also want unchanged pages that are missing a language translation, add `--include-missing`.
+When a page is processed for a language, units still marked `untranslated` are always rewritten in that pass (prevents partial-page segment holes).
 
 Delta dry-run preview (no queue/process/cursor changes):
 

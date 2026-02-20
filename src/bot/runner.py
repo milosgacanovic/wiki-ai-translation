@@ -3,9 +3,10 @@ from __future__ import annotations
 import argparse
 import logging
 import hashlib
+from datetime import datetime
 
 from .config import load_config
-from .logging import configure_logging
+from .logging import configure_logging, attach_file_logging
 from .mediawiki import MediaWikiClient
 from .db import get_conn
 from .jobs import (
@@ -31,6 +32,7 @@ from .run_report import (
     report_last_run,
     last_run_id,
     fetch_translate_ok_pairs,
+    close_stale_running_runs,
 )
 
 
@@ -310,6 +312,13 @@ def main() -> None:
     configure_logging()
     cfg = load_config()
 
+    def _setup_run_log(conn, run_id: int) -> str:
+        stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        log_path = f"docs/runs/raw/run-{run_id}-{stamp}.log"
+        attach_file_logging(log_path)
+        log_item(conn, run_id, "run", "info", None, None, f"raw_log={log_path}")
+        return log_path
+
     session = __import__("requests").Session()
     client = MediaWikiClient(cfg.mw_api_url, cfg.mw_user_agent, session)
     client.login(cfg.mw_username, cfg.mw_password)
@@ -346,6 +355,15 @@ def main() -> None:
             deleted = delete_queued_jobs(conn, job_type="translate_page")
         print(f"cleared_queued_translate_jobs={deleted}")
 
+    with get_conn(cfg.pg_dsn) as conn:
+        stale = close_stale_running_runs(conn)
+        for stale_id in stale:
+            write_report_file(conn, stale_id)
+            logging.getLogger("runner").warning(
+                "closed stale run as interrupted and wrote report: run_id=%s",
+                stale_id,
+            )
+
     if args.report_last:
         with get_conn(cfg.pg_dsn) as conn:
             print(report_last_run(conn))
@@ -367,6 +385,7 @@ def main() -> None:
         run_id = None
         with get_conn(cfg.pg_dsn) as conn:
             run_id = start_run(conn, "retry-approve", cfg)
+            _setup_run_log(conn, run_id)
         retry_approve_from_run(cfg, client, source_run_id, run_id)
         with get_conn(cfg.pg_dsn) as conn:
             finish_run(conn, run_id, "done")
@@ -378,6 +397,7 @@ def main() -> None:
         try:
             with get_conn(cfg.pg_dsn) as conn:
                 run_id = start_run(conn, "run-all", cfg)
+                _setup_run_log(conn, run_id)
 
                 def _record(
                     kind: str,
@@ -512,6 +532,7 @@ def main() -> None:
             cursors: dict[str, str | None] = {}
             with get_conn(cfg.pg_dsn) as conn:
                 run_id = start_run(conn, "poll-once", cfg)
+                _setup_run_log(conn, run_id)
                 langs = sorted(set(cfg.target_langs))
                 if len(langs) <= 1:
                     cursors[cursor_name] = get_ingest_cursor(conn, cursor_name)
