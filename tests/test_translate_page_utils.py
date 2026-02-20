@@ -1,4 +1,6 @@
 from bot.translate_page import (
+    _protect_terms,
+    assemble_translated_page,
     _strip_empty_paragraphs,
     _apply_termbase,
     _apply_termbase_safe,
@@ -30,6 +32,25 @@ def test_strip_empty_paragraphs():
     assert _strip_empty_paragraphs(text) == "HelloWorld"
     text = "{{DISPLAYTITLE:Foo}}\n<p><br></p>\nBody"
     assert _strip_empty_paragraphs(text) == "{{DISPLAYTITLE:Foo}}\nBody"
+
+
+def test_protect_terms_respects_word_boundaries():
+    text = "Concatenate cat category scat"
+    protected, placeholders = _protect_terms(text, [("cat", "DOG")])
+    assert protected == "Concatenate __NT0__ category scat"
+    assert placeholders == {"__NT0__": "DOG"}
+
+
+def test_assemble_translated_page_replaces_marked_units():
+    wikitext = "<translate>\n<!--T:1-->One\n<!--T:2-->Two\n</translate>\n"
+    out = assemble_translated_page(
+        wikitext,
+        {
+            "1": "Uno\n",
+            "2": "Dos\n",
+        },
+    )
+    assert out == "Uno\nDos\n"
 
 
 def test_apply_termbase():

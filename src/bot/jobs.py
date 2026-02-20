@@ -64,6 +64,7 @@ def next_jobs(conn: psycopg.Connection, limit: int = 10) -> list[Job]:
             WHERE status = 'queued'
             ORDER BY priority DESC, id ASC
             LIMIT %s
+            FOR UPDATE SKIP LOCKED
             """,
             (limit,),
         )

@@ -6,6 +6,7 @@ import logging
 import requests
 
 from .config import load_config
+from .ingest import is_translation_subpage
 from .logging import configure_logging
 from .mediawiki import MediaWikiClient
 from .translate_page import (
@@ -64,6 +65,8 @@ def main() -> None:
     errors = 0
 
     for src_title in titles:
+        if is_translation_subpage(src_title, langs):
+            continue
         try:
             source_rev, norm_title = client.get_page_revision_id(src_title)
         except Exception:

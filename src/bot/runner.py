@@ -212,6 +212,11 @@ def process_queue(
                                 message = "status changed to outdated"
                         log_item(conn, run_id, "translate", status, job.page_title, job.lang, message)
                 mark_job_done(conn, job.id)
+            except SystemExit as exc:
+                message = str(exc) or "system exit"
+                mark_job_error(conn, job.id, message)
+                if run_id is not None:
+                    log_item(conn, run_id, "translate", "error", job.page_title, job.lang, message)
             except Exception as exc:
                 mark_job_error(conn, job.id, str(exc))
                 if run_id is not None:

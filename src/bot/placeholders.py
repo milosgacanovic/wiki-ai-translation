@@ -16,7 +16,9 @@ REFERENCES_BLOCK_RE = re.compile(r"<references\b[^>]*>.*?</references>", re.IGNO
 REFERENCES_SELF_RE = re.compile(r"<references\b[^>]*/\s*>", re.IGNORECASE)
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 URL_RE = re.compile(r"https?://\S+")
-MAGIC_WORD_RE = re.compile(r"__([A-Z0-9_]+)__")
+# Match canonical MediaWiki magic words (letters/underscores, no digits) and
+# avoid protecting bot placeholder tokens like __PH0__.
+MAGIC_WORD_RE = re.compile(r"__([A-Z_]+)__")
 FILE_LINK_FULL_RE = re.compile(r"\[\[(?:File|Image):[^\]]+\]\]", re.IGNORECASE)
 
 

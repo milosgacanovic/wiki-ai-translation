@@ -118,7 +118,7 @@ def ingest_title(
         _record("skip", "translation subpage")
         return
 
-    unit_keys = client.list_translation_unit_keys(norm_title)
+    unit_keys = client.list_translation_unit_keys(norm_title, cfg.source_lang)
     if unit_keys:
         source_changed = not page_record or page_record.last_source_rev != rev_id
         if not force and page_record and page_record.last_source_rev == rev_id:
@@ -235,7 +235,9 @@ def ingest_title(
 
         if not dry_run:
             for _ in range(5):
-                unit_keys = client.list_translation_unit_keys(norm_title)
+                unit_keys = client.list_translation_unit_keys(
+                    norm_title, cfg.source_lang
+                )
                 if unit_keys:
                     enqueue_translations(cfg, conn, norm_title)
                     _record("ok", "units created; queued translation")
@@ -243,7 +245,7 @@ def ingest_title(
                     return
                 time.sleep(0.5)
 
-    unit_keys = client.list_translation_unit_keys(norm_title)
+    unit_keys = client.list_translation_unit_keys(norm_title, cfg.source_lang)
     if unit_keys:
         if not dry_run:
             enqueue_translations(cfg, conn, norm_title)
@@ -267,8 +269,11 @@ def ingest_all(
 ) -> None:
     cursor = get_ingest_cursor(conn, "main")
     processed = 0
+    page_size = 1 if limit is not None else 200
     while True:
-        titles, next_cursor = client.all_pages_page(namespace=0, apcontinue=cursor)
+        titles, next_cursor = client.all_pages_page(
+            namespace=0, limit=page_size, apcontinue=cursor
+        )
         if not titles:
             break
         for title in titles:
@@ -281,7 +286,7 @@ def ingest_all(
             processed += 1
             if limit is not None and processed >= limit:
                 if not dry_run:
-                    set_ingest_cursor(conn, "main", cursor)
+                    set_ingest_cursor(conn, "main", next_cursor)
                 return
             if sleep_ms > 0:
                 time.sleep(sleep_ms / 1000.0)

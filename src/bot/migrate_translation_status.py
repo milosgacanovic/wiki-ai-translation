@@ -21,10 +21,12 @@ from .translate_page import (
 log = logging.getLogger("bot.migrate_translation_status")
 
 
-def _iter_base_titles(client: MediaWikiClient, only_title: str | None) -> list[str]:
+def _iter_base_titles(
+    client: MediaWikiClient, only_title: str | None, source_lang: str
+) -> list[str]:
     if only_title:
         return [only_title]
-    return client.iter_translation_base_titles(source_lang="en")
+    return client.iter_translation_base_titles(source_lang=source_lang)
 
 
 def main() -> None:
@@ -48,7 +50,7 @@ def main() -> None:
     client = MediaWikiClient(cfg.mw_api_url, cfg.mw_user_agent, session)
     client.login(cfg.mw_username, cfg.mw_password)
 
-    base_titles = _iter_base_titles(client, args.only_title)
+    base_titles = _iter_base_titles(client, args.only_title, cfg.source_lang)
     done = 0
     edited = 0
     skipped = 0

@@ -5,6 +5,7 @@ from bot.ingest import (
     should_skip_title,
     is_translation_subpage,
     is_redirect_wikitext,
+    ingest_all,
 )
 
 
@@ -40,3 +41,32 @@ def test_redirect_detection():
     assert is_redirect_wikitext("#REDIRECT [[Target]]")
     assert is_redirect_wikitext("   #redirect [[Target]]")
     assert not is_redirect_wikitext("Regular content")
+
+
+class _PagedClient:
+    def __init__(self):
+        self.calls = []
+
+    def all_pages_page(self, namespace=0, limit=200, apcontinue=None):
+        self.calls.append((namespace, limit, apcontinue))
+        return ["Page A"], "cursor-next"
+
+
+def test_ingest_all_limit_updates_cursor_to_next_page(monkeypatch):
+    client = _PagedClient()
+    set_calls = []
+
+    monkeypatch.setattr("bot.ingest.get_ingest_cursor", lambda conn, name="main": "cursor-start")
+    monkeypatch.setattr(
+        "bot.ingest.set_ingest_cursor",
+        lambda conn, name="main", apcontinue=None: set_calls.append((name, apcontinue)),
+    )
+    monkeypatch.setattr(
+        "bot.ingest.ingest_title",
+        lambda cfg, client, conn, title, record=None, force=False, dry_run=False: None,
+    )
+
+    ingest_all(object(), client, object(), limit=1)
+
+    assert client.calls == [(0, 1, "cursor-start")]
+    assert set_calls == [("main", "cursor-next")]

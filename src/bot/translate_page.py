@@ -390,7 +390,10 @@ def _tokenize_links(
 
 
 def _strip_empty_paragraphs(text: str) -> str:
-    cleaned = EMPTY_P_RE.sub("", text)
+    sentinel = "__EMPTY_PARAGRAPH__"
+    cleaned = EMPTY_P_RE.sub(sentinel, text)
+    cleaned = re.sub(rf"\n[ \t]*{re.escape(sentinel)}[ \t]*\n", "\n", cleaned)
+    cleaned = cleaned.replace(sentinel, "")
     return cleaned.strip()
 
 def _collapse_blank_lines(text: str) -> str:
@@ -859,7 +862,8 @@ def _rewrite_internal_links_to_lang_with_source(
     known_langs: set[str] | None = None,
 ) -> str:
     implicit_display_by_target = implicit_display_by_target or {}
-    known_langs = known_langs or set()
+    known_langs = set(known_langs or set())
+    known_langs.add(lang)
 
     def _trim_lang_suffix(value: str) -> str:
         return _strip_known_lang_suffix(value, known_langs)
@@ -951,7 +955,7 @@ def _protect_terms(text: str, terms: list[tuple[str, str]]) -> tuple[str, dict[s
         return text, {}
     placeholders: dict[str, str] = {}
     for term, preferred in sorted(terms, key=lambda t: len(t[0]), reverse=True):
-        pattern = re.compile(rf"(?<!\\w){re.escape(term)}(?!\\w)", re.IGNORECASE)
+        pattern = re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.IGNORECASE)
 
         def _repl(match: re.Match) -> str:
             token = f"__NT{len(placeholders)}__"
@@ -1166,11 +1170,11 @@ def _is_redirect_wikitext(text: str) -> bool:
 
 
 def _fetch_unit_sources(
-    client: MediaWikiClient, norm_title: str, keys: list[str]
+    client: MediaWikiClient, norm_title: str, keys: list[str], source_lang: str
 ) -> list[Segment]:
     segments: list[Segment] = []
     for key in keys:
-        unit_title = f"Translations:{norm_title}/{key}/en"
+        unit_title = f"Translations:{norm_title}/{key}/{source_lang}"
         try:
             text, _, _ = client.get_page_wikitext(unit_title)
         except MediaWikiError as exc:
@@ -1200,7 +1204,7 @@ def _fetch_messagecollection_segments(
 
 def assemble_translated_page(wikitext: str, translations: dict[str, str]) -> str:
     output = []
-    matches = list(re.finditer(r"<!--T:(\\d+)-->", wikitext))
+    matches = list(re.finditer(r"<!--T:(\d+)-->", wikitext))
     if not matches:
         return wikitext
 
@@ -1351,7 +1355,9 @@ def main() -> None:
         unit_keys = client.list_translation_unit_keys(norm_title, cfg.source_lang)
         if unit_keys:
             unit_keys = sorted(set(unit_keys), key=lambda k: int(k))
-            segments = _fetch_unit_sources(client, norm_title, unit_keys)
+            segments = _fetch_unit_sources(
+                client, norm_title, unit_keys, cfg.source_lang
+            )
             if not segments:
                 segments = split_translate_units(source_wikitext_en)
         else:
