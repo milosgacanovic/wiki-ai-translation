@@ -25,8 +25,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/ar|الملاحق
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/ar|انضم إلى المجتمع
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* شبكة DanceResource.org
+** https://www.danceresource.org/|الصفحة الرئيسية للمشروع
 ** https://events.danceresource.org/events/|ابحث عن الفعاليات
 ** https://events.danceresource.org/hosts/|ابحث عن المعلمين
 * SEARCH
@@ -47,8 +47,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/cs|Přílohy
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/cs|Připojte se ke komunitě
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Síť
+** https://www.danceresource.org/|Domovská stránka projektu
 ** https://events.danceresource.org/events/|Najít akce
 ** https://events.danceresource.org/hosts/|Najít učitele
 * SEARCH
@@ -69,8 +69,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/da|Bilag
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/da|Bliv en del af fællesskabet
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Netværk
+** https://www.danceresource.org/|Projektets hjemmeside
 ** https://events.danceresource.org/events/|Find begivenheder
 ** https://events.danceresource.org/hosts/|Find lærere
 * SEARCH
@@ -91,8 +91,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/de|Anhänge
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/de|Der Gemeinschaft beitreten
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Netzwerk
+** https://www.danceresource.org/|Projektstartseite
 ** https://events.danceresource.org/events/|Veranstaltungen finden
 ** https://events.danceresource.org/hosts/|Lehrende finden
 * SEARCH
@@ -113,8 +113,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/el|Παραρτήματα
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/el|Γίνετε μέλος της κοινότητας
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Δίκτυο DanceResource.org
+** https://www.danceresource.org/|Αρχική σελίδα του έργου
 ** https://events.danceresource.org/events/|Βρείτε εκδηλώσεις
 ** https://events.danceresource.org/hosts/|Βρείτε δασκάλους
 * SEARCH
@@ -135,8 +135,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/es|Apéndices
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/es|Únete a la comunidad
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Red DanceResource.org
+** https://www.danceresource.org/|Página de inicio del proyecto
 ** https://events.danceresource.org/events/|Encontrar eventos
 ** https://events.danceresource.org/hosts/|Encontrar profesores
 * SEARCH
@@ -157,8 +157,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/fi|Liitteet
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/fi|Liity yhteisöön
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org-verkosto
+** https://www.danceresource.org/|Projektin kotisivu
 ** https://events.danceresource.org/events/|Etsi tapahtumia
 ** https://events.danceresource.org/hosts/|Etsi opettajia
 * SEARCH
@@ -179,8 +179,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/fr|Annexes
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/fr|Rejoindre la communauté
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Réseau DanceResource.org
+** https://www.danceresource.org/|Page d'accueil du projet
 ** https://events.danceresource.org/events/|Trouver des événements
 ** https://events.danceresource.org/hosts/|Trouver des enseignants
 * SEARCH
@@ -201,8 +201,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/he|נספחים
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/he|הצטרפו לקהילה
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* רשת DanceResource.org
+** https://www.danceresource.org/|דף הבית של הפרויקט
 ** https://events.danceresource.org/events/|מצא אירועים
 ** https://events.danceresource.org/hosts/|מצא מדריכים
 * SEARCH
@@ -223,8 +223,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/hi|परिशिष्ट
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/hi|समुदाय से जुड़ें
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org नेटवर्क
+** https://www.danceresource.org/|प्रोजेक्ट होम
 ** https://events.danceresource.org/events/|कार्यक्रम खोजें
 ** https://events.danceresource.org/hosts/|शिक्षक खोजें
 * SEARCH
@@ -245,8 +245,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/hr|Dodaci
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/hr|Pridružite se zajednici
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Mreža DanceResource.org
+** https://www.danceresource.org/|Početna stranica projekta
 ** https://events.danceresource.org/events/|Pronađi događaje
 ** https://events.danceresource.org/hosts/|Pronađi učitelje
 * SEARCH
@@ -267,8 +267,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/hu|Függelékek
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/hu|Csatlakozz a közösséghez
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Hálózat
+** https://www.danceresource.org/|Projekt főoldal
 ** https://events.danceresource.org/events/|Események keresése
 ** https://events.danceresource.org/hosts/|Oktatók keresése
 * SEARCH
@@ -289,8 +289,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/id|Lampiran
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/id|Bergabung dengan komunitas
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Jaringan DanceResource.org
+** https://www.danceresource.org/|Beranda Proyek
 ** https://events.danceresource.org/events/|Temukan Acara
 ** https://events.danceresource.org/hosts/|Temukan Pengajar
 * SEARCH
@@ -311,8 +311,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/is|Viðaukar
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/is|Taktu þátt í samfélaginu
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Net
+** https://www.danceresource.org/|Heimasíða verkefnisins
 ** https://events.danceresource.org/events/|Finna viðburði
 ** https://events.danceresource.org/hosts/|Finna kennara
 * SEARCH
@@ -333,8 +333,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/it|Appendici
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/it|Unisciti alla comunità
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Rete DanceResource.org
+** https://www.danceresource.org/|Pagina principale del progetto
 ** https://events.danceresource.org/events/|Trovare eventi
 ** https://events.danceresource.org/hosts/|Trovare insegnanti
 * SEARCH
@@ -355,8 +355,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/ja|付録
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/ja|コミュニティに参加する
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.orgネットワーク
+** https://www.danceresource.org/|プロジェクトホーム
 ** https://events.danceresource.org/events/|イベントを探す
 ** https://events.danceresource.org/hosts/|講師を探す
 * SEARCH
@@ -377,8 +377,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/ka|დანართები
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/ka|შემოუერთდით საზოგადოებას
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org ქსელი
+** https://www.danceresource.org/|პროექტის მთავარი გვერდი
 ** https://events.danceresource.org/events/|ღონისძიებების ძიება
 ** https://events.danceresource.org/hosts/|მასწავლებლების ძიება
 * SEARCH
@@ -399,8 +399,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/ko|부록
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/ko|커뮤니티에 참여하기
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org 네트워크
+** https://www.danceresource.org/|프로젝트 홈
 ** https://events.danceresource.org/events/|이벤트 찾기
 ** https://events.danceresource.org/hosts/|강사 찾기
 * SEARCH
@@ -421,8 +421,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/lb|Annexen
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/lb|Maach mat an der Gemeinschaft
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Netzwierk
+** https://www.danceresource.org/|Projekt Haaptsiit
 ** https://events.danceresource.org/events/|Evenementer fannen
 ** https://events.danceresource.org/hosts/|Léierpersounen fannen
 * SEARCH
@@ -443,8 +443,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/nb|Vedlegg
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/nb|Bli med i fellesskapet
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Nettverk
+** https://www.danceresource.org/|Prosjektets hjemmeside
 ** https://events.danceresource.org/events/|Finn arrangementer
 ** https://events.danceresource.org/hosts/|Finn lærere
 * SEARCH
@@ -465,8 +465,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/nl|Bijlagen
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/nl|Word lid van de gemeenschap
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Netwerk
+** https://www.danceresource.org/|Projecthomepagina
 ** https://events.danceresource.org/events/|Evenementen vinden
 ** https://events.danceresource.org/hosts/|Leraren vinden
 * SEARCH
@@ -487,8 +487,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/pl|Aneksy
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/pl|Dołącz do społeczności
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Sieć DanceResource.org
+** https://www.danceresource.org/|Strona główna projektu
 ** https://events.danceresource.org/events/|Znajdź wydarzenia
 ** https://events.danceresource.org/hosts/|Znajdź nauczycieli
 * SEARCH
@@ -509,8 +509,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/pt|Apêndices
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/pt|Junte-se à comunidade
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Rede DanceResource.org
+** https://www.danceresource.org/|Página inicial do projeto
 ** https://events.danceresource.org/events/|Encontrar eventos
 ** https://events.danceresource.org/hosts/|Encontrar professores
 * SEARCH
@@ -531,8 +531,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/ro|Anexe
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/ro|Alăturați-vă comunității
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Rețeaua DanceResource.org
+** https://www.danceresource.org/|Pagina principală a proiectului
 ** https://events.danceresource.org/events/|Găsește evenimente
 ** https://events.danceresource.org/hosts/|Găsește profesori
 * SEARCH
@@ -553,8 +553,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/ru|Приложения
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/ru|Присоединяйтесь к сообществу
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Сеть DanceResource.org
+** https://www.danceresource.org/|Главная страница проекта
 ** https://events.danceresource.org/events/|Найти мероприятия
 ** https://events.danceresource.org/hosts/|Найти преподавателей
 * SEARCH
@@ -575,8 +575,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/sk|Prílohy
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/sk|Pridajte sa ku komunite
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Sieť
+** https://www.danceresource.org/|Domovská stránka projektu
 ** https://events.danceresource.org/events/|Nájsť podujatia
 ** https://events.danceresource.org/hosts/|Nájsť učiteľov
 * SEARCH
@@ -597,8 +597,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/sl|Dodatki
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/sl|Pridružite se skupnosti
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Mreža DanceResource.org
+** https://www.danceresource.org/|Domača stran projekta
 ** https://events.danceresource.org/events/|Poišči dogodke
 ** https://events.danceresource.org/hosts/|Poišči učitelje
 * SEARCH
@@ -619,8 +619,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/sr|Dodaci
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/sr|Pridružite se zajednici
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Mreža DanceResource.org
+** https://www.danceresource.org/|Početna stranica projekta
 ** https://events.danceresource.org/events/|Pronađi događaje
 ** https://events.danceresource.org/hosts/|Pronađi učitelje
 * SEARCH
@@ -641,8 +641,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/sv|Bilagor
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/sv|Gå med i gemenskapen
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Nätverk
+** https://www.danceresource.org/|Projektets startsida
 ** https://events.danceresource.org/events/|Hitta evenemang
 ** https://events.danceresource.org/hosts/|Hitta lärare
 * SEARCH
@@ -663,8 +663,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/th|ภาคผนวก
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/th|เข้าร่วมชุมชน
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* เครือข่าย DanceResource.org
+** https://www.danceresource.org/|หน้าหลักโครงการ
 ** https://events.danceresource.org/events/|ค้นหากิจกรรม
 ** https://events.danceresource.org/hosts/|ค้นหาครู
 * SEARCH
@@ -685,8 +685,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/tr|Ekler
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/tr|Topluluğa Katılın
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org Ağı
+** https://www.danceresource.org/|Proje Ana Sayfası
 ** https://events.danceresource.org/events/|Etkinlik Bul
 ** https://events.danceresource.org/hosts/|Öğretmen Bul
 * SEARCH
@@ -707,8 +707,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/uk|Додатки
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/uk|Приєднуйтесь до спільноти
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Мережа DanceResource.org
+** https://www.danceresource.org/|Головна сторінка проекту
 ** https://events.danceresource.org/events/|Знайти заходи
 ** https://events.danceresource.org/hosts/|Знайти вчителів
 * SEARCH
@@ -729,8 +729,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/vi|Phụ lục
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/vi|Tham gia cộng đồng
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Mạng lưới DanceResource.org
+** https://www.danceresource.org/|Trang chủ dự án
 ** https://events.danceresource.org/events/|Tìm sự kiện
 ** https://events.danceresource.org/hosts/|Tìm giáo viên
 * SEARCH
@@ -751,8 +751,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/zh|附录
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/zh|加入社区
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* DanceResource.org 网络
+** https://www.danceresource.org/|项目主页
 ** https://events.danceresource.org/events/|查找活动
 ** https://events.danceresource.org/hosts/|查找教师
 * SEARCH
@@ -773,8 +773,8 @@ SIDEBAR_BY_LANG: dict[str, str] = {
 ** Appendices/zu|Izinamathiselo
 ** recentchanges-url|recentchanges
 ** Join_Our_Community/zu|Joyina umphakathi
-* DanceResource Network
-** https://www.danceresource.org/|DanceResource.org
+* Inethiwekhi ye-DanceResource.org
+** https://www.danceresource.org/|Ikhaya Lephrojekthi
 ** https://events.danceresource.org/events/|Thola Imicimbi
 ** https://events.danceresource.org/hosts/|Thola Otitshela
 * SEARCH
